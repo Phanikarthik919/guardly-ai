@@ -12,7 +12,8 @@ import {
   FileText,
   Receipt,
   GitCompare,
-  ClipboardCheck
+  ClipboardCheck,
+  Download
 } from "lucide-react";
 import {
   sampleRegulations,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/automationData";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { jsPDF } from "jspdf";
 
 type AgentStatus = "idle" | "running" | "complete" | "error";
 
@@ -49,6 +51,48 @@ export default function AutomationPage() {
 
   const updateAgent = (id: number, updates: Partial<AgentState>) => {
     setAgents(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+  };
+
+  const generatePDF = (reports: any[]) => {
+    const doc = new jsPDF();
+    let yPos = 20;
+
+    doc.setFontSize(20);
+    doc.text("Audit Report Summary", 20, yPos);
+    yPos += 15;
+
+    reports.forEach((report, index) => {
+      if (yPos > 270) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.setTextColor(report.status === "VIOLATION" ? 220 : 0, 0, 0);
+      doc.text(`Report: ${report.report_id}`, 20, yPos);
+      yPos += 8;
+
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Transaction: ${report.transaction_id}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Risk Score: ${(report.risk_score * 100).toFixed(0)}%`, 20, yPos);
+      yPos += 6;
+      doc.text(`Summary: ${report.summary}`, 20, yPos, { maxWidth: 170 });
+      yPos += 20;
+
+      if (report.recommendations && report.recommendations.length > 0) {
+        doc.text("Recommendations:", 25, yPos);
+        yPos += 6;
+        report.recommendations.forEach((rec: any) => {
+           doc.text(`- [${rec.priority}] ${rec.action} (By: ${rec.deadline})`, 30, yPos);
+           yPos += 6;
+        });
+        yPos += 10;
+      }
+    });
+
+    doc.save("compliance_audit_report.pdf");
   };
 
   const runAutomation = async () => {
@@ -173,6 +217,9 @@ export default function AutomationPage() {
     }
   };
 
+  const isComplete = agents.every(a => a.status === "complete");
+  const agent5Output = agents.find(a => a.id === 5)?.output;
+
   return (
     <DashboardLayout>
       <div className="flex items-center justify-between mb-8">
@@ -182,15 +229,27 @@ export default function AutomationPage() {
             Master orchestration for all 5 compliance agents.
           </p>
         </div>
-        <Button
-          size="lg"
-          onClick={runAutomation}
-          disabled={isRunning}
-          className="gap-2 bg-primary hover:bg-primary/90"
-        >
-          {isRunning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-          {isRunning ? "Running Automation..." : "Start Full Automation"}
-        </Button>
+        <div className="flex gap-2">
+            {isComplete && agent5Output && (
+                <Button
+                    variant="outline"
+                    onClick={() => generatePDF(agent5Output)}
+                    className="gap-2"
+                >
+                    <Download className="h-4 w-4" />
+                    Download Audit PDF
+                </Button>
+            )}
+            <Button
+            size="lg"
+            onClick={runAutomation}
+            disabled={isRunning}
+            className="gap-2 bg-primary hover:bg-primary/90"
+            >
+            {isRunning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
+            {isRunning ? "Running Automation..." : "Start Full Automation"}
+            </Button>
+        </div>
       </div>
 
       <div className="grid gap-6">

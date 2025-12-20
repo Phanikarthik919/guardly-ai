@@ -47,8 +47,8 @@ const HeroSection = () => {
             daily government transactions.
           </p>
           
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: "0.4s" }}>
+          {/* CTA Buttons - Removed animation to ensure visibility */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button size="lg" className="group" asChild>
               <Link to="/automation">
                 <Cpu className="w-5 h-5 mr-2" />
