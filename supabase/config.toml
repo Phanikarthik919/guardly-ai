@@ -1,1 +1,10 @@
 project_id = "lzygdoxveftgcjkipkqy"
+
+[functions.compliance-chat]
+verify_jwt = false
+
+[functions.elevenlabs-conversation-token]
+verify_jwt = false
+
+[functions.elevenlabs-tts]
+verify_jwt = false
