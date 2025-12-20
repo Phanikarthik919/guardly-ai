@@ -25,10 +25,41 @@ export default function ComplianceMappingPage() {
   const [selectedClauseIds, setSelectedClauseIds] = useState<string[]>([]);
   const [selectedResult, setSelectedResult] = useState<ComplianceResult | null>(null);
   const [processingCount, setProcessingCount] = useState({ current: 0, total: 0 });
+  const [currentCheck, setCurrentCheck] = useState<string>('');
 
   const { response, isLoading, runAgent, clearResponse } = useStreamingAgent({
     onComplete: () => {}
   });
+
+  const parseAIResponse = (aiResponse: string, transactionId: string, clauseId: string): ComplianceResult => {
+    const lowerResponse = aiResponse.toLowerCase();
+    
+    let status: ComplianceResult['status'] = 'warning';
+    if (lowerResponse.includes('compliant') && !lowerResponse.includes('non-compliant') && !lowerResponse.includes('not compliant')) {
+      status = 'compliant';
+    } else if (lowerResponse.includes('violation') || lowerResponse.includes('non-compliant') || lowerResponse.includes('not compliant')) {
+      status = 'violation';
+    } else if (lowerResponse.includes('missing') && lowerResponse.includes('document')) {
+      status = 'missing_docs';
+    }
+
+    let riskLevel: ComplianceResult['riskLevel'] = 'medium';
+    if (lowerResponse.includes('high risk') || lowerResponse.includes('critical') || lowerResponse.includes('severe')) {
+      riskLevel = 'high';
+    } else if (lowerResponse.includes('low risk') || lowerResponse.includes('minor') || lowerResponse.includes('compliant')) {
+      riskLevel = 'low';
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      transactionId,
+      clauseId,
+      status,
+      riskLevel,
+      reasoning: aiResponse.slice(0, 500) || 'Compliance analysis completed based on regulatory framework.',
+      missingDocs: status === 'missing_docs' ? ['Supporting documentation required'] : undefined
+    };
+  };
 
   const handleCheckCompliance = async () => {
     if (selectedTxIds.length === 0 || selectedClauseIds.length === 0) {
@@ -45,41 +76,38 @@ export default function ComplianceMappingPage() {
     setProcessingCount({ current: 0, total });
 
     clearResponse();
+    const results: ComplianceResult[] = [];
 
     for (const tx of selectedTxs) {
       for (const clause of selectedClauses) {
         setProcessingCount(prev => ({ ...prev, current: prev.current + 1 }));
+        setCurrentCheck(`${tx.vendor} → ${clause.clauseId}`);
         
-        await runAgent('agent-compliance-mapping', {
-          transaction: {
-            category: tx.category,
-            amount: tx.amount,
-            vendor: tx.vendor,
-            description: tx.description,
-            date: tx.date
-          },
-          clause: {
-            clauseId: clause.clauseId,
-            rule: clause.rule,
-            conditions: clause.conditions,
-            penalties: clause.penalties
-          }
-        });
+        let aiResponse = '';
+        try {
+          aiResponse = await runAgent('agent-compliance-mapping', {
+            transaction: {
+              id: tx.id,
+              category: tx.category,
+              amount: tx.amount,
+              tax: tx.tax,
+              vendor: tx.vendor,
+              description: tx.description,
+              date: tx.date
+            },
+            clause: {
+              clauseId: clause.clauseId,
+              rule: clause.rule,
+              conditions: clause.conditions,
+              penalties: clause.penalties
+            }
+          });
+        } catch (err) {
+          aiResponse = 'Unable to complete automated compliance check. Manual review required.';
+        }
 
-        // Generate compliance result
-        const statuses: ComplianceResult['status'][] = ['compliant', 'violation', 'warning', 'missing_docs'];
-        const risks: ComplianceResult['riskLevel'][] = ['low', 'medium', 'high'];
-        
-        const result: ComplianceResult = {
-          id: crypto.randomUUID(),
-          transactionId: tx.id,
-          clauseId: clause.id,
-          status: statuses[Math.floor(Math.random() * statuses.length)],
-          riskLevel: risks[Math.floor(Math.random() * risks.length)],
-          reasoning: response || "Compliance check completed based on regulatory framework analysis",
-          missingDocs: Math.random() > 0.7 ? ["Supporting invoice", "Authorization form"] : undefined
-        };
-
+        const result = parseAIResponse(aiResponse || response, tx.id, clause.id);
+        results.push(result);
         addComplianceResults([result]);
       }
     }
@@ -87,7 +115,14 @@ export default function ComplianceMappingPage() {
     setSelectedTxIds([]);
     setSelectedClauseIds([]);
     setProcessingCount({ current: 0, total: 0 });
-    toast({ title: "Compliance check completed" });
+    setCurrentCheck('');
+    
+    const violations = results.filter(r => r.status === 'violation').length;
+    const compliant = results.filter(r => r.status === 'compliant').length;
+    toast({ 
+      title: "Compliance check completed",
+      description: `${results.length} checks: ${compliant} compliant, ${violations} violations`
+    });
   };
 
   const txColumns = [
