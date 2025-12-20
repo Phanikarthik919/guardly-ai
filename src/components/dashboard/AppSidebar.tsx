@@ -51,7 +51,7 @@ const mainNavItems = [
   { title: "Architecture", url: "/dashboard/architecture", icon: Network },
   { title: "Compliance Q&A", url: "/dashboard/compliance-qa", icon: MessageSquare },
   { title: "Features", url: "/dashboard/features", icon: Sparkles },
-  { title: "Master Automation", url: "/automation", icon: Cpu },
+  { title: "Master Agent", url: "/automation", icon: Cpu },
 ];
 
 const agents = [
