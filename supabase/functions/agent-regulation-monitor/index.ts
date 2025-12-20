@@ -6,18 +6,19 @@ const corsHeaders = {
 };
 
 const SYSTEM_PROMPT = `You are a Regulation Monitoring Agent for Indian government financial compliance. Your role is to:
-1. Simulate fetching and indexing the latest rules from government portals
-2. Identify new circulars, amendments, and regulatory updates
+1. Analyze regulatory content from web pages
+2. Identify key circulars, amendments, and regulatory updates
 3. Categorize regulations by type (GST, Income Tax, FEMA, etc.)
-4. Highlight urgent compliance deadlines
+4. Extract compliance deadlines and requirements
 
-When given a query about regulations or a portal to monitor, provide:
-- Recent regulatory updates (simulated but realistic)
-- Key compliance deadlines
+When given web page content, provide:
+- A clear title for the regulation
+- Key compliance requirements
+- Important deadlines
 - Impact assessment for government transactions
-- Links to relevant ministry/portal sources
+- Categorization by regulation type
 
-Format responses clearly with sections for: Updates, Deadlines, and Recommended Actions.`;
+Format responses clearly with sections for: Summary, Key Requirements, Deadlines, and Category.`;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,14 +26,23 @@ serve(async (req) => {
   }
 
   try {
-    const { query } = await req.json();
+    const { query, url, crawledContent } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log("Regulation Monitor Agent processing:", query);
+    let contentToAnalyze = query;
+    
+    // If crawled content is provided, use it for analysis
+    if (crawledContent) {
+      contentToAnalyze = `Analyze this regulation content crawled from ${url || 'a government portal'}:\n\n${crawledContent}`;
+    } else if (url && !query) {
+      contentToAnalyze = `Provide guidance on monitoring regulations from: ${url}`;
+    }
+
+    console.log("Regulation Monitor Agent processing:", contentToAnalyze?.slice(0, 200));
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -44,7 +54,7 @@ serve(async (req) => {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: query },
+          { role: "user", content: contentToAnalyze },
         ],
         stream: true,
       }),

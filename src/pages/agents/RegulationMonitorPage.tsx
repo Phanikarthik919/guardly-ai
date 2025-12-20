@@ -9,6 +9,7 @@ import {
   Eye,
   Sparkles,
   FileText,
+  Globe,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AgentPageHeader } from "@/components/dashboard/AgentPageHeader";
@@ -25,6 +26,7 @@ import { useStreamingAgent } from "@/hooks/useStreamingAgent";
 import { useToast } from "@/hooks/use-toast";
 import { RegulationDetailModal } from "@/components/agents/RegulationDetailModal";
 import { RegulationStatsCards } from "@/components/agents/RegulationStatsCards";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function RegulationMonitorPage() {
   const { regulations, addRegulations, setRegulations } = usePipeline();
@@ -33,15 +35,39 @@ export default function RegulationMonitorPage() {
   const [textInput, setTextInput] = useState("");
   const [selectedRegulation, setSelectedRegulation] = useState<Regulation | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [isCrawling, setIsCrawling] = useState(false);
 
   const { isLoading, runAgent, response } = useStreamingAgent();
 
   const handleFetchFromUrl = async () => {
     if (!urlInput.trim()) return;
 
+    setIsCrawling(true);
     try {
+      // First, crawl the URL using Firecrawl
+      toast({ title: "Crawling webpage...", description: "Fetching content from the URL" });
+      
+      const { data: crawlData, error: crawlError } = await supabase.functions.invoke('firecrawl-scrape', {
+        body: { url: urlInput, options: { formats: ['markdown'], onlyMainContent: true } },
+      });
+
+      if (crawlError || !crawlData?.success) {
+        throw new Error(crawlData?.error || crawlError?.message || 'Failed to crawl URL');
+      }
+
+      const crawledContent = crawlData.data?.markdown || crawlData.markdown || '';
+      const pageTitle = crawlData.data?.metadata?.title || crawlData.metadata?.title || '';
+      
+      if (!crawledContent) {
+        throw new Error('No content found on the page');
+      }
+
+      toast({ title: "Analyzing content...", description: "AI is extracting regulatory information" });
+
+      // Then analyze with AI
       await runAgent("agent-regulation-monitor", {
-        query: `Analyze this regulation source URL and provide a detailed summary of the regulatory content. URL: ${urlInput}`,
+        url: urlInput,
+        crawledContent: crawledContent.slice(0, 15000), // Limit content size
       });
 
       let hostname = "Unknown Source";
@@ -54,18 +80,25 @@ export default function RegulationMonitorPage() {
       const newRegulation: Regulation = {
         id: crypto.randomUUID(),
         source: hostname,
-        title: `Regulation from ${hostname}`,
+        title: pageTitle || `Regulation from ${hostname}`,
         date: new Date().toISOString().split("T")[0],
         version: "1.0",
-        content: response || "Fetched regulation content pending analysis...",
+        content: crawledContent.slice(0, 5000),
         url: urlInput,
       };
 
       addRegulations([newRegulation]);
       setUrlInput("");
-      toast({ title: "Regulation fetched successfully" });
-    } catch {
-      // Error handled in hook
+      toast({ title: "Regulation crawled successfully", description: "Content extracted and analyzed" });
+    } catch (error) {
+      console.error('Crawl error:', error);
+      toast({ 
+        title: "Failed to crawl URL", 
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive" 
+      });
+    } finally {
+      setIsCrawling(false);
     }
   };
 
@@ -260,14 +293,14 @@ export default function RegulationMonitorPage() {
                   <Button
                     className="w-full gap-2"
                     onClick={handleFetchFromUrl}
-                    disabled={isLoading || !urlInput.trim()}
+                    disabled={isLoading || isCrawling || !urlInput.trim()}
                   >
-                    {isLoading ? (
+                    {isCrawling || isLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Download className="h-4 w-4" />
+                      <Globe className="h-4 w-4" />
                     )}
-                    {isLoading ? "Fetching..." : "Fetch Regulations"}
+                    {isCrawling ? "Crawling..." : isLoading ? "Analyzing..." : "Crawl & Analyze"}
                   </Button>
                 </TabsContent>
 
