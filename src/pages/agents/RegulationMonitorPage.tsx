@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Radio,
   Plus,
@@ -10,6 +10,9 @@ import {
   Sparkles,
   FileText,
   Globe,
+  RefreshCw,
+  Clock,
+  Database,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AgentPageHeader } from "@/components/dashboard/AgentPageHeader";
@@ -28,6 +31,26 @@ import { RegulationDetailModal } from "@/components/agents/RegulationDetailModal
 import { RegulationStatsCards } from "@/components/agents/RegulationStatsCards";
 import { supabase } from "@/integrations/supabase/client";
 
+interface IndexedRegulation {
+  id: string;
+  url: string;
+  source: string;
+  title: string | null;
+  summary: string | null;
+  category: string | null;
+  crawled_at: string;
+  is_processed: boolean;
+}
+
+interface PortalInfo {
+  id: string;
+  name: string;
+  base_url: string;
+  category: string;
+  is_active: boolean;
+  last_crawled_at: string | null;
+}
+
 export default function RegulationMonitorPage() {
   const { regulations, addRegulations, setRegulations } = usePipeline();
   const { toast } = useToast();
@@ -36,8 +59,70 @@ export default function RegulationMonitorPage() {
   const [selectedRegulation, setSelectedRegulation] = useState<Regulation | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [isCrawling, setIsCrawling] = useState(false);
+  const [indexedRegulations, setIndexedRegulations] = useState<IndexedRegulation[]>([]);
+  const [portals, setPortals] = useState<PortalInfo[]>([]);
+  const [isRunningCrawler, setIsRunningCrawler] = useState(false);
+  const [activeTab, setActiveTab] = useState("manual");
 
   const { isLoading, runAgent, response } = useStreamingAgent();
+
+  // Fetch indexed regulations and portals
+  useEffect(() => {
+    fetchIndexedRegulations();
+    fetchPortals();
+  }, []);
+
+  const fetchIndexedRegulations = async () => {
+    const { data, error } = await supabase
+      .from('indexed_regulations')
+      .select('id, url, source, title, summary, category, crawled_at, is_processed')
+      .order('crawled_at', { ascending: false })
+      .limit(100);
+
+    if (!error && data) {
+      setIndexedRegulations(data);
+    }
+  };
+
+  const fetchPortals = async () => {
+    const { data, error } = await supabase
+      .from('regulation_portals')
+      .select('*')
+      .eq('is_active', true);
+
+    if (!error && data) {
+      setPortals(data);
+    }
+  };
+
+  const handleRunCrawler = async () => {
+    setIsRunningCrawler(true);
+    try {
+      toast({ title: "Starting crawler...", description: "Fetching regulations from all portals" });
+      
+      const { data, error } = await supabase.functions.invoke('regulation-crawler', {});
+
+      if (error) throw error;
+
+      toast({ 
+        title: "Crawl complete", 
+        description: `Processed ${data?.results?.length || 0} portals` 
+      });
+
+      // Refresh data
+      fetchIndexedRegulations();
+      fetchPortals();
+    } catch (error) {
+      console.error('Crawler error:', error);
+      toast({ 
+        title: "Crawler failed", 
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive" 
+      });
+    } finally {
+      setIsRunningCrawler(false);
+    }
+  };
 
   const handleFetchFromUrl = async () => {
     if (!urlInput.trim()) return;
@@ -251,6 +336,75 @@ export default function RegulationMonitorPage() {
         step={1}
         nextAgent={{ title: "Legal Parsing", url: "/agents/legal-parser" }}
       />
+
+      {/* Automated Crawler Section */}
+      <Card className="mb-6 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Database className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Automated Regulation Crawler</CardTitle>
+                <CardDescription>
+                  Daily crawl scheduled at 6:00 AM UTC • Monitoring {portals.length} government portals
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              onClick={handleRunCrawler}
+              disabled={isRunningCrawler}
+              className="gap-2"
+            >
+              {isRunningCrawler ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {isRunningCrawler ? "Crawling..." : "Run Now"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {portals.map((portal) => (
+              <div key={portal.id} className="p-3 rounded-lg bg-background/50 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="outline" className="text-xs">{portal.category}</Badge>
+                </div>
+                <p className="font-medium text-sm">{portal.name}</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                  <Clock className="h-3 w-3" />
+                  {portal.last_crawled_at 
+                    ? new Date(portal.last_crawled_at).toLocaleDateString()
+                    : "Not crawled yet"}
+                </p>
+              </div>
+            ))}
+          </div>
+          
+          {indexedRegulations.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <p className="text-sm text-muted-foreground mb-2">
+                <span className="font-medium text-foreground">{indexedRegulations.length}</span> regulations indexed in database
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {indexedRegulations.slice(0, 5).map((reg) => (
+                  <Badge key={reg.id} variant="secondary" className="text-xs">
+                    {reg.title?.slice(0, 40) || reg.url.slice(0, 40)}...
+                  </Badge>
+                ))}
+                {indexedRegulations.length > 5 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{indexedRegulations.length - 5} more
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <RegulationStatsCards regulations={regulations} />
 
