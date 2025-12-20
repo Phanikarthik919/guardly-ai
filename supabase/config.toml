@@ -8,3 +8,18 @@ verify_jwt = false
 
 [functions.elevenlabs-tts]
 verify_jwt = false
+
+[functions.agent-regulation-monitor]
+verify_jwt = false
+
+[functions.agent-legal-parser]
+verify_jwt = false
+
+[functions.agent-transaction-understanding]
+verify_jwt = false
+
+[functions.agent-compliance-mapping]
+verify_jwt = false
+
+[functions.agent-auditor-assistant]
+verify_jwt = false
