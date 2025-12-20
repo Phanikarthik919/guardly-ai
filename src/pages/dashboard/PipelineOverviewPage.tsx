@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Radio, 
@@ -10,14 +11,21 @@ import {
   CheckCircle2,
   ArrowRight,
   Sparkles,
-  BarChart3
+  BarChart3,
+  Play,
+  Loader2,
+  RefreshCw,
+  XCircle,
+  Info
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePipeline } from "@/contexts/PipelineContext";
+import { usePipelineRunner, PipelineStep } from "@/hooks/usePipelineRunner";
 
 const agentSteps = [
   { 
@@ -25,46 +33,69 @@ const agentSteps = [
     icon: Radio,
     url: "/agents/regulation-monitor",
     dataKey: "regulations" as const,
+    stepKey: "fetching_regulations" as PipelineStep,
     color: "from-blue-500/20 to-blue-500/5",
-    borderColor: "border-blue-500/30"
+    borderColor: "border-blue-500/30",
+    activeColor: "bg-blue-500"
   },
   { 
     title: "Legal Parsing", 
     icon: FileText,
     url: "/agents/legal-parser",
     dataKey: "parsedClauses" as const,
+    stepKey: "parsing_clauses" as PipelineStep,
     color: "from-purple-500/20 to-purple-500/5",
-    borderColor: "border-purple-500/30"
+    borderColor: "border-purple-500/30",
+    activeColor: "bg-purple-500"
   },
   { 
     title: "Transaction Understanding", 
     icon: Receipt,
     url: "/agents/transaction-understanding",
     dataKey: "transactions" as const,
+    stepKey: "processing_transactions" as PipelineStep,
     color: "from-green-500/20 to-green-500/5",
-    borderColor: "border-green-500/30"
+    borderColor: "border-green-500/30",
+    activeColor: "bg-green-500"
   },
   { 
     title: "Compliance Mapping", 
     icon: GitCompare,
     url: "/agents/compliance-mapping",
     dataKey: "complianceResults" as const,
+    stepKey: "mapping_compliance" as PipelineStep,
     color: "from-orange-500/20 to-orange-500/5",
-    borderColor: "border-orange-500/30"
+    borderColor: "border-orange-500/30",
+    activeColor: "bg-orange-500"
   },
   { 
     title: "Auditor Assistant", 
     icon: ClipboardCheck,
     url: "/agents/auditor-assistant",
     dataKey: "auditReports" as const,
+    stepKey: "generating_report" as PipelineStep,
     color: "from-red-500/20 to-red-500/5",
-    borderColor: "border-red-500/30"
+    borderColor: "border-red-500/30",
+    activeColor: "bg-red-500"
   },
+];
+
+const stepOrder: PipelineStep[] = [
+  'fetching_regulations',
+  'parsing_clauses',
+  'processing_transactions',
+  'mapping_compliance',
+  'generating_report',
 ];
 
 export default function PipelineOverviewPage() {
   const navigate = useNavigate();
   const pipeline = usePipeline();
+  const { isRunning, progress, runFullPipeline, reset } = usePipelineRunner({
+    onComplete: (report) => {
+      console.log('Pipeline complete:', report);
+    }
+  });
 
   const getCount = (dataKey: typeof agentSteps[number]['dataKey']) => {
     return pipeline[dataKey]?.length || 0;
@@ -86,6 +117,30 @@ export default function PipelineOverviewPage() {
     ? Math.round((complianceStats.compliant / complianceStats.total) * 100) 
     : 0;
 
+  const getStepStatus = (stepKey: PipelineStep) => {
+    if (progress.step === 'error') return 'error';
+    if (progress.step === 'complete') return 'complete';
+    if (progress.step === stepKey) return 'active';
+    
+    const currentIndex = stepOrder.indexOf(progress.step);
+    const stepIndex = stepOrder.indexOf(stepKey);
+    if (currentIndex > stepIndex) return 'complete';
+    return 'pending';
+  };
+
+  const handleRunPipeline = async () => {
+    try {
+      await runFullPipeline();
+    } catch (error) {
+      console.error('Pipeline failed:', error);
+    }
+  };
+
+  const handleResetPipeline = () => {
+    pipeline.clearAll();
+    reset();
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -97,12 +152,38 @@ export default function PipelineOverviewPage() {
               Pipeline Overview
             </h1>
             <p className="text-muted-foreground mt-1">
-              Monitor your compliance pipeline status and agent activity
+              Automated end-to-end compliance pipeline with AI agents
             </p>
           </div>
-          <Button onClick={() => pipeline.clearAll()} variant="outline" size="sm">
-            Reset Pipeline
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={handleResetPipeline} 
+              variant="outline" 
+              size="sm"
+              disabled={isRunning}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Reset
+            </Button>
+            <Button 
+              onClick={handleRunPipeline}
+              disabled={isRunning}
+              size="sm"
+              className="min-w-[140px]"
+            >
+              {isRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Run Pipeline
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* Overall Stats */}
@@ -164,7 +245,84 @@ export default function PipelineOverviewPage() {
           </Card>
         </div>
 
-        {/* Pipeline Progress */}
+        {/* Pipeline Progress - shown when running */}
+        {(isRunning || progress.step !== 'idle') && (
+          <Card className={`border-2 ${progress.step === 'error' ? 'border-destructive/50' : progress.step === 'complete' ? 'border-success/50' : 'border-primary/50'}`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  {progress.step === 'error' ? (
+                    <XCircle className="h-5 w-5 text-destructive" />
+                  ) : progress.step === 'complete' ? (
+                    <CheckCircle2 className="h-5 w-5 text-success" />
+                  ) : (
+                    <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+                  )}
+                  Pipeline Execution
+                </CardTitle>
+                {progress.totalItems > 0 && (
+                  <Badge variant="secondary">
+                    {progress.currentItem} / {progress.totalItems}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">{progress.message}</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Step Progress */}
+              <div className="flex items-center gap-2">
+                {agentSteps.map((step, index) => {
+                  const status = getStepStatus(step.stepKey);
+                  return (
+                    <div key={step.title} className="flex items-center flex-1">
+                      <div className={`
+                        w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all
+                        ${status === 'active' ? `${step.activeColor} text-white animate-pulse` : 
+                          status === 'complete' ? 'bg-success text-white' : 
+                          status === 'error' ? 'bg-destructive text-white' : 
+                          'bg-muted text-muted-foreground'}
+                      `}>
+                        {status === 'complete' ? <CheckCircle2 className="h-4 w-4" /> : 
+                         status === 'active' ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                         index + 1}
+                      </div>
+                      {index < agentSteps.length - 1 && (
+                        <div className={`flex-1 h-1 mx-1 rounded ${
+                          status === 'complete' || getStepStatus(agentSteps[index + 1]?.stepKey) !== 'pending' 
+                            ? 'bg-success' 
+                            : 'bg-muted'
+                        }`} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Logs */}
+              {progress.logs.length > 0 && (
+                <ScrollArea className="h-32 border rounded-lg p-3 bg-muted/30">
+                  <div className="space-y-1 font-mono text-xs">
+                    {progress.logs.slice(-15).map((log, i) => (
+                      <div key={i} className={`flex items-start gap-2 ${
+                        log.type === 'error' ? 'text-destructive' :
+                        log.type === 'success' ? 'text-success' :
+                        log.type === 'warning' ? 'text-warning' :
+                        'text-muted-foreground'
+                      }`}>
+                        <span className="opacity-50 shrink-0">
+                          {log.timestamp.toLocaleTimeString()}
+                        </span>
+                        <span>{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Static Pipeline Progress */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Pipeline Progress</CardTitle>
@@ -188,21 +346,34 @@ export default function PipelineOverviewPage() {
           {agentSteps.map((step, index) => {
             const count = getCount(step.dataKey);
             const isActive = count > 0;
+            const stepStatus = getStepStatus(step.stepKey);
             
             return (
               <Card 
                 key={step.title}
-                className={`relative cursor-pointer transition-all hover:shadow-md ${step.borderColor} ${isActive ? 'border-2' : 'border border-dashed'}`}
+                className={`relative cursor-pointer transition-all hover:shadow-md ${step.borderColor} ${
+                  stepStatus === 'active' ? 'border-2 ring-2 ring-primary/20' :
+                  isActive ? 'border-2' : 'border border-dashed'
+                }`}
                 onClick={() => navigate(step.url)}
               >
                 <CardContent className={`pt-4 bg-gradient-to-br ${step.color} h-full`}>
                   <div className="flex flex-col items-center text-center space-y-3">
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <span className="text-xs font-mono">Step {index + 1}</span>
+                      {stepStatus === 'active' && (
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      )}
                     </div>
                     
-                    <div className={`p-3 rounded-full ${isActive ? 'bg-primary/20' : 'bg-muted'}`}>
-                      <step.icon className={`h-6 w-6 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <div className={`p-3 rounded-full ${
+                      stepStatus === 'active' ? 'bg-primary/30 animate-pulse' :
+                      isActive ? 'bg-primary/20' : 'bg-muted'
+                    }`}>
+                      <step.icon className={`h-6 w-6 ${
+                        stepStatus === 'active' ? 'text-primary' :
+                        isActive ? 'text-primary' : 'text-muted-foreground'
+                      }`} />
                     </div>
                     
                     <div>
@@ -246,6 +417,31 @@ export default function PipelineOverviewPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Info Card - How the Pipeline Works */}
+        {progress.step === 'idle' && totalItems === 0 && (
+          <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Info className="h-5 w-5 text-primary" />
+                How the Pipeline Works
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>Click <strong>"Run Pipeline"</strong> to execute all agents automatically:</p>
+              <ol className="list-decimal list-inside space-y-2 ml-2">
+                <li><strong>Regulation Monitor</strong> → Fetches indexed regulations from the database</li>
+                <li><strong>Legal Parser</strong> → Converts regulations into IF-THEN compliance clauses</li>
+                <li><strong>Transaction Understanding</strong> → Processes financial transactions</li>
+                <li><strong>Compliance Mapping</strong> → Checks transactions against clauses</li>
+                <li><strong>Auditor Assistant</strong> → Generates final audit report with recommendations</li>
+              </ol>
+              <p className="text-xs mt-4">
+                💡 For best results, first crawl regulations using the Regulation Monitor, or add transactions via Transaction Understanding.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Recent Activity Summary */}
         {pipeline.auditReports.length > 0 && (
