@@ -24,6 +24,7 @@ import LegalParserPage from "./pages/agents/LegalParserPage";
 import TransactionUnderstandingPage from "./pages/agents/TransactionUnderstandingPage";
 import ComplianceMappingPage from "./pages/agents/ComplianceMappingPage";
 import AuditorAssistantPage from "./pages/agents/AuditorAssistantPage";
+import AutomationPage from "./pages/AutomationPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -86,6 +87,11 @@ const App = () => (
                 <ProtectedRoute><AuditorAssistantPage /></ProtectedRoute>
               } />
               
+              {/* Automation Route */}
+              <Route path="/automation" element={
+                <ProtectedRoute><AutomationPage /></ProtectedRoute>
+              } />
+
               {/* Bottom Nav Routes */}
               <Route path="/notifications" element={
                 <ProtectedRoute><NotificationsPage /></ProtectedRoute>
