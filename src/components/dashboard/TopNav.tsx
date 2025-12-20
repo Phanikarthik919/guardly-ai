@@ -1,4 +1,4 @@
-import { Shield, Bell, Settings, HelpCircle, User, Menu } from "lucide-react";
+import { Shield, Bell, Settings, HelpCircle, User, Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,9 +8,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export function TopNav() {
   const { toggleSidebar } = useSidebar();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
+
+  const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
 
   return (
     <header className="h-14 border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
@@ -73,14 +84,21 @@ export function TopNav() {
                 <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
                   <User className="h-4 w-4 text-primary" />
                 </div>
-                <span className="hidden md:block text-sm">User</span>
+                <span className="hidden md:block text-sm">{displayName}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem className="text-muted-foreground text-xs">
+                {user?.email}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem>Profile</DropdownMenuItem>
               <DropdownMenuItem>Account Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Sign Out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
