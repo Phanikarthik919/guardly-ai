@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Receipt, Upload, Loader2, Plus, Trash2, Eye, Sparkles } from "lucide-react";
+import { useState, useRef } from "react";
+import { Receipt, Upload, Loader2, Plus, Trash2, Eye, Sparkles, FileText, X } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AgentPageHeader } from "@/components/dashboard/AgentPageHeader";
 import { DataTable } from "@/components/dashboard/DataTable";
@@ -20,6 +20,9 @@ export default function TransactionUnderstandingPage() {
   const { toast } = useToast();
   const [textInput, setTextInput] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [manualTx, setManualTx] = useState({
     category: "",
     amount: "",
@@ -31,7 +34,33 @@ export default function TransactionUnderstandingPage() {
 
   const { response, isLoading, runAgent, clearResponse } = useStreamingAgent({
     onComplete: (fullResponse) => {
-      // Parse AI response into transaction
+      // Try to parse JSON array of transactions from AI response
+      try {
+        const jsonMatch = fullResponse.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const newTransactions: Transaction[] = parsed.map((t: any) => ({
+              id: crypto.randomUUID(),
+              category: t.category || "Expense",
+              amount: t.amount || "₹0.00",
+              tax: t.tax || "₹0.00",
+              vendor: t.vendor || "Unknown",
+              date: t.date || new Date().toISOString().split('T')[0],
+              description: t.description || ""
+            }));
+            addTransactions(newTransactions);
+            setTextInput("");
+            setUploadedFile(null);
+            toast({ title: `${newTransactions.length} transaction(s) extracted successfully` });
+            return;
+          }
+        }
+      } catch (e) {
+        console.log("Could not parse as JSON array, using fallback");
+      }
+
+      // Fallback: create single transaction
       const newTransaction: Transaction = {
         id: crypto.randomUUID(),
         category: "Expense",
@@ -44,15 +73,73 @@ export default function TransactionUnderstandingPage() {
 
       addTransactions([newTransaction]);
       setTextInput("");
+      setUploadedFile(null);
       toast({ title: "Transaction extracted successfully" });
     }
   });
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      toast({ title: "Please upload a PDF file", variant: "destructive" });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File size must be less than 10MB", variant: "destructive" });
+      return;
+    }
+
+    setUploadedFile(file);
+    toast({ title: `${file.name} selected`, description: "Click 'Extract from PDF' to process" });
+  };
+
+  const handleExtractFromPdf = async () => {
+    if (!uploadedFile) return;
+
+    setIsProcessingPdf(true);
+    clearResponse();
+
+    try {
+      // Read PDF as base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(uploadedFile);
+      const base64Data = await base64Promise;
+
+      // Send to AI agent with PDF content
+      await runAgent('agent-transaction-understanding', {
+        transactionData: `[PDF DOCUMENT: ${uploadedFile.name}]\n\nPlease extract all financial transactions from this document. The document is provided as base64 encoded PDF. Extract transaction details including: category, amount, tax, vendor, date, and description. Return the transactions as a JSON array.\n\nBase64 PDF (first 5000 chars): ${base64Data.slice(0, 5000)}`
+      });
+    } catch (error) {
+      console.error("Error processing PDF:", error);
+      toast({ title: "Error processing PDF", variant: "destructive" });
+    } finally {
+      setIsProcessingPdf(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setUploadedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleExtractFromText = async () => {
     if (!textInput.trim()) return;
     clearResponse();
     await runAgent('agent-transaction-understanding', {
-      transactionData: textInput.slice(0, 3000)
+      transactionData: `Please extract all financial transactions from the following text. Return as a JSON array with fields: category, amount, tax, vendor, date, description.\n\n${textInput.slice(0, 3000)}`
     });
   };
 
@@ -171,14 +258,76 @@ export default function TransactionUnderstandingPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-1 space-y-4">
+          {/* PDF Upload Card */}
           <Card className="border-primary/20">
             <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent">
               <CardTitle className="text-lg flex items-center gap-2">
-                <Upload className="h-4 w-4 text-primary" />
-                Extract from Document
+                <FileText className="h-4 w-4 text-primary" />
+                Upload PDF Document
               </CardTitle>
               <CardDescription>
-                Paste transaction document text to extract data
+                Upload invoices, receipts, or transaction statements
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="pdf-upload"
+              />
+              
+              {!uploadedFile ? (
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                >
+                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Click to upload PDF
+                  </p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">
+                    Max 10MB
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                    <span className="text-sm truncate">{uploadedFile.name}</span>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={handleRemoveFile} className="shrink-0">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
+              <Button 
+                className="w-full" 
+                onClick={handleExtractFromPdf}
+                disabled={isLoading || isProcessingPdf || !uploadedFile}
+              >
+                {(isLoading || isProcessingPdf) ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Receipt className="h-4 w-4 mr-2" />
+                )}
+                Extract from PDF
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Text Input Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Paste Document Text
+              </CardTitle>
+              <CardDescription>
+                Or paste transaction document text directly
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
@@ -186,16 +335,17 @@ export default function TransactionUnderstandingPage() {
                 placeholder="Paste invoice, receipt, or transaction document text..."
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
-                rows={6}
+                rows={4}
                 className="resize-none"
               />
               <Button 
+                variant="outline"
                 className="w-full" 
                 onClick={handleExtractFromText}
                 disabled={isLoading || !textInput.trim()}
               >
                 {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Receipt className="h-4 w-4 mr-2" />}
-                Extract Transaction Data
+                Extract from Text
               </Button>
             </CardContent>
           </Card>
