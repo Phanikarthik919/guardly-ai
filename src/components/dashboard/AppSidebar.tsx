@@ -45,13 +45,13 @@ import { useState } from "react";
 
 const mainNavItems = [
   { title: "Home", url: "/dashboard", icon: Home },
+  { title: "Master Agent", url: "/master-agent", icon: Cpu, highlight: true },
   { title: "Pipeline Overview", url: "/dashboard/pipeline", icon: Workflow },
   { title: "Problem", url: "/dashboard/problem", icon: AlertTriangle },
   { title: "Solution", url: "/dashboard/solution", icon: Lightbulb },
   { title: "Architecture", url: "/dashboard/architecture", icon: Network },
   { title: "Compliance Q&A", url: "/dashboard/compliance-qa", icon: MessageSquare },
   { title: "Features", url: "/dashboard/features", icon: Sparkles },
-  { title: "Master Automation", url: "/automation", icon: Cpu },
 ];
 
 const agents = [
