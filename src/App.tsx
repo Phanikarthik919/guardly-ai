@@ -2,13 +2,22 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PipelineProvider } from "@/contexts/PipelineContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/dashboard/ProtectedRoute";
-import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import ProblemPage from "./pages/dashboard/ProblemPage";
+import SolutionPage from "./pages/dashboard/SolutionPage";
+import ArchitecturePage from "./pages/dashboard/ArchitecturePage";
+import ComplianceQAPage from "./pages/dashboard/ComplianceQAPage";
+import FeaturesPage from "./pages/dashboard/FeaturesPage";
+import TechStackPage from "./pages/dashboard/TechStackPage";
+import TeamPage from "./pages/dashboard/TeamPage";
+import NotificationsPage from "./pages/dashboard/NotificationsPage";
+import SettingsPage from "./pages/dashboard/SettingsPage";
+import HelpPage from "./pages/dashboard/HelpPage";
 import RegulationMonitorPage from "./pages/agents/RegulationMonitorPage";
 import LegalParserPage from "./pages/agents/LegalParserPage";
 import TransactionUnderstandingPage from "./pages/agents/TransactionUnderstandingPage";
@@ -27,11 +36,36 @@ const App = () => (
             <Toaster />
             <Sonner />
             <Routes>
-              <Route path="/" element={<Index />} />
+              <Route path="/" element={<Navigate to="/auth" replace />} />
               <Route path="/auth" element={<Auth />} />
+              
+              {/* Dashboard Routes */}
               <Route path="/dashboard" element={
                 <ProtectedRoute><Dashboard /></ProtectedRoute>
               } />
+              <Route path="/dashboard/problem" element={
+                <ProtectedRoute><ProblemPage /></ProtectedRoute>
+              } />
+              <Route path="/dashboard/solution" element={
+                <ProtectedRoute><SolutionPage /></ProtectedRoute>
+              } />
+              <Route path="/dashboard/architecture" element={
+                <ProtectedRoute><ArchitecturePage /></ProtectedRoute>
+              } />
+              <Route path="/dashboard/compliance-qa" element={
+                <ProtectedRoute><ComplianceQAPage /></ProtectedRoute>
+              } />
+              <Route path="/dashboard/features" element={
+                <ProtectedRoute><FeaturesPage /></ProtectedRoute>
+              } />
+              <Route path="/dashboard/tech-stack" element={
+                <ProtectedRoute><TechStackPage /></ProtectedRoute>
+              } />
+              <Route path="/dashboard/team" element={
+                <ProtectedRoute><TeamPage /></ProtectedRoute>
+              } />
+              
+              {/* Agent Routes */}
               <Route path="/agents/regulation-monitor" element={
                 <ProtectedRoute><RegulationMonitorPage /></ProtectedRoute>
               } />
@@ -47,15 +81,18 @@ const App = () => (
               <Route path="/agents/auditor-assistant" element={
                 <ProtectedRoute><AuditorAssistantPage /></ProtectedRoute>
               } />
+              
+              {/* Bottom Nav Routes */}
               <Route path="/notifications" element={
-                <ProtectedRoute><Dashboard /></ProtectedRoute>
+                <ProtectedRoute><NotificationsPage /></ProtectedRoute>
               } />
               <Route path="/settings" element={
-                <ProtectedRoute><Dashboard /></ProtectedRoute>
+                <ProtectedRoute><SettingsPage /></ProtectedRoute>
               } />
               <Route path="/help" element={
-                <ProtectedRoute><Dashboard /></ProtectedRoute>
+                <ProtectedRoute><HelpPage /></ProtectedRoute>
               } />
+              
               <Route path="*" element={<NotFound />} />
             </Routes>
           </PipelineProvider>

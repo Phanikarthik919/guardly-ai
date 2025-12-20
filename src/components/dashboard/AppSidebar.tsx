@@ -10,7 +10,14 @@ import {
   HelpCircle,
   Bell,
   ChevronDown,
-  Workflow
+  Workflow,
+  AlertTriangle,
+  Lightbulb,
+  Network,
+  MessageSquare,
+  Sparkles,
+  Cpu,
+  Users
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { usePipeline } from "@/contexts/PipelineContext";
@@ -35,6 +42,15 @@ import {
 } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
+
+const mainNavItems = [
+  { title: "Home", url: "/dashboard", icon: Home },
+  { title: "Problem", url: "/dashboard/problem", icon: AlertTriangle },
+  { title: "Solution", url: "/dashboard/solution", icon: Lightbulb },
+  { title: "Architecture", url: "/dashboard/architecture", icon: Network },
+  { title: "Compliance Q&A", url: "/dashboard/compliance-qa", icon: MessageSquare },
+  { title: "Features", url: "/dashboard/features", icon: Sparkles },
+];
 
 const agents = [
   { 
@@ -74,8 +90,9 @@ const agents = [
   },
 ];
 
-const generalLinks = [
-  { title: "Dashboard", url: "/dashboard", icon: Home },
+const additionalNav = [
+  { title: "Technology Stack", url: "/dashboard/tech-stack", icon: Cpu },
+  { title: "Meet ReguGuard Innovators", url: "/dashboard/team", icon: Users },
 ];
 
 const bottomLinks = [
@@ -110,14 +127,16 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {generalLinks.map((item) => (
+              {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink 
                       to={item.url} 
+                      end={item.url === "/dashboard"}
                       className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                     >
@@ -131,13 +150,14 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* AI Agents */}
         <SidebarGroup>
           <Collapsible open={agentsOpen} onOpenChange={setAgentsOpen}>
             <CollapsibleTrigger asChild>
               <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent/50 rounded-md px-2 py-1.5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Workflow className="h-4 w-4" />
-                  {!collapsed && <span>Agents</span>}
+                  {!collapsed && <span>AI Agents</span>}
                 </div>
                 {!collapsed && (
                   <ChevronDown className={`h-4 w-4 transition-transform ${agentsOpen ? '' : '-rotate-90'}`} />
@@ -179,6 +199,28 @@ export function AppSidebar() {
               </SidebarGroupContent>
             </CollapsibleContent>
           </Collapsible>
+        </SidebarGroup>
+
+        {/* Additional Navigation */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {additionalNav.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title}>
+                    <NavLink 
+                      to={item.url}
+                      className="flex items-center gap-2 hover:bg-sidebar-accent rounded-md transition-colors"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
