@@ -25,6 +25,7 @@ import TransactionUnderstandingPage from "./pages/agents/TransactionUnderstandin
 import ComplianceMappingPage from "./pages/agents/ComplianceMappingPage";
 import AuditorAssistantPage from "./pages/agents/AuditorAssistantPage";
 import AutomationPage from "./pages/AutomationPage";
+import MasterAgentPage from "./pages/MasterAgentPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -90,6 +91,9 @@ const App = () => (
               {/* Master Automation Route */}
               <Route path="/automation" element={
                 <ProtectedRoute><AutomationPage /></ProtectedRoute>
+              } />
+              <Route path="/master-agent" element={
+                <ProtectedRoute><MasterAgentPage /></ProtectedRoute>
               } />
 
               {/* Bottom Nav Routes */}
