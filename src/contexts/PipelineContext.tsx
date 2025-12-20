@@ -1,59 +1,92 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
+// Agent 1 Output / Agent 2 Input
 export interface Regulation {
-  id: string;
+  id: string; // regulation_id
   source: string;
-  title: string;
-  date: string;
+  title: string; // name
+  date: string; // effective_date
   version: string;
-  content: string;
-  url?: string;
+  content: string; // clauses (count) or full text
+  url?: string; // source_url
+  last_updated?: string;
 }
 
+// Agent 2 Output / Agent 4 Input
 export interface ParsedClause {
-  id: string;
-  regulationId: string;
-  clauseId: string;
-  rule: string;
-  conditions: string;
-  penalties: string;
+  id: string; // Unique ID for React keys
+  clause_id: string;
+  regulation_id: string;
+  rule_name: string;
+  transaction_types: string[];
+  amount_threshold: number;
+  tax_rate?: number;
+  min_bids?: number;
+  required_documents: string[];
+  severity: 'high' | 'medium' | 'low';
+  description?: string;
 }
 
+// Agent 3 Output / Agent 4 Input
 export interface Transaction {
-  id: string;
+  id: string; // transaction_id
+  amount: number;
+  vendor_name: string;
   category: string;
-  amount: string;
-  tax: string;
-  vendor: string;
+  department?: string;
+  tax_paid: number;
+  bids_count?: number; // derived from bids array in prompt
+  documents_attached: string[];
   date: string;
+  description?: string;
+  data_completeness?: number;
+  missing_fields?: string[];
+}
+
+// Agent 4 Output / Agent 5 Input
+export interface Violation {
+  type: 'TAX_MISMATCH' | 'BIDDING_REQUIREMENT' | 'MISSING_DOCUMENT';
+  clause_id: string;
+  severity: 'high' | 'medium' | 'low';
   description: string;
+  expected_tax?: number;
+  claimed_tax?: number;
+  expected_bids?: number;
+  actual_bids?: number;
+  required_doc?: string;
+  corrective_action?: string;
 }
 
 export interface ComplianceResult {
-  id: string;
-  transactionId: string;
-  clauseId: string;
-  status: 'compliant' | 'violation' | 'warning' | 'missing_docs';
-  riskLevel: 'low' | 'medium' | 'high';
-  reasoning: string;
-  missingDocs?: string[];
+  transaction_id: string;
+  compliance_status: 'VIOLATION' | 'COMPLIANT';
+  violations: Violation[];
+  overall_risk_score: number;
+  checked_at: string;
+}
+
+// Agent 5 Output
+export interface Recommendation {
+  violation_type: string;
+  action: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  deadline: string;
 }
 
 export interface AuditReport {
-  id: string;
-  generatedAt: string;
-  summary: {
-    totalChecked: number;
-    compliant: number;
-    violations: number;
-    warnings: number;
+  report_id: string;
+  transaction_id: string;
+  status: string;
+  summary: string;
+  violations: Violation[];
+  recommendations: Recommendation[];
+  risk_score: number;
+  transaction_details?: {
+    amount: number;
+    vendor: string;
+    category: string;
+    tax_paid: number;
   };
-  details: {
-    complianceResultId: string;
-    clauseReference: string;
-    reasoning: string;
-    correctiveAction: string;
-  }[];
 }
 
 interface PipelineContextType {
@@ -90,23 +123,39 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
   const [auditReports, setAuditReports] = useState<AuditReport[]>([]);
 
   const addRegulations = (regs: Regulation[]) => {
-    setRegulations(prev => [...prev, ...regs]);
+    setRegulations(prev => {
+      // Avoid duplicates
+      const newIds = new Set(regs.map(r => r.id));
+      return [...prev.filter(r => !newIds.has(r.id)), ...regs];
+    });
   };
 
   const addParsedClauses = (clauses: ParsedClause[]) => {
-    setParsedClauses(prev => [...prev, ...clauses]);
+    setParsedClauses(prev => {
+      const newIds = new Set(clauses.map(c => c.clause_id));
+      return [...prev.filter(c => !newIds.has(c.clause_id)), ...clauses];
+    });
   };
 
   const addTransactions = (txns: Transaction[]) => {
-    setTransactions(prev => [...prev, ...txns]);
+    setTransactions(prev => {
+      const newIds = new Set(txns.map(t => t.id));
+      return [...prev.filter(t => !newIds.has(t.id)), ...txns];
+    });
   };
 
   const addComplianceResults = (results: ComplianceResult[]) => {
-    setComplianceResults(prev => [...prev, ...results]);
+    setComplianceResults(prev => {
+      const newIds = new Set(results.map(r => r.transaction_id));
+      return [...prev.filter(r => !newIds.has(r.transaction_id)), ...results];
+    });
   };
 
   const addAuditReport = (report: AuditReport) => {
-    setAuditReports(prev => [...prev, report]);
+    setAuditReports(prev => {
+      const newIds = new Set([report.report_id]);
+      return [...prev.filter(r => !newIds.has(r.report_id)), report];
+    });
   };
 
   const clearAll = () => {
