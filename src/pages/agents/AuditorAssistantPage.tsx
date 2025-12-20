@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardCheck, Loader2, Download, FileText, BarChart3, Sparkles, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ClipboardCheck, Loader2, Download, FileText, BarChart3, Sparkles, Calendar, AlertTriangle, CheckCircle2, FileDown } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AgentPageHeader } from "@/components/dashboard/AgentPageHeader";
 import { DataTable, StatusBadge } from "@/components/dashboard/DataTable";
@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { AuditReportStatsCards } from "@/components/agents/AuditReportStatsCards";
 import { useStreamingAgent } from "@/hooks/useStreamingAgent";
+import { exportAuditReportToPdf } from "@/utils/pdfExport";
 
 export default function AuditorAssistantPage() {
   const { 
@@ -90,6 +91,17 @@ export default function AuditorAssistantPage() {
 
   const handleExportPdf = () => {
     if (!activeReport) return;
+    exportAuditReportToPdf({
+      report: activeReport,
+      complianceResults,
+      transactions,
+      parsedClauses
+    });
+    toast({ title: "PDF report exported successfully" });
+  };
+
+  const handleExportJson = () => {
+    if (!activeReport) return;
     const blob = new Blob([JSON.stringify(activeReport, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -97,7 +109,7 @@ export default function AuditorAssistantPage() {
     a.download = `audit-report-${activeReport.generatedAt.split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Report exported" });
+    toast({ title: "JSON report exported" });
   };
 
   const resultColumns = [
@@ -253,10 +265,16 @@ export default function AuditorAssistantPage() {
                       Generated on {new Date(activeReport.generatedAt).toLocaleString()}
                     </CardDescription>
                   </div>
+                <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handleExportPdf}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
+                    <FileDown className="h-4 w-4 mr-2" />
+                    PDF
                   </Button>
+                  <Button variant="ghost" size="sm" onClick={handleExportJson}>
+                    <Download className="h-4 w-4 mr-2" />
+                    JSON
+                  </Button>
+                </div>
                 </CardHeader>
                 <CardContent className="pt-4">
                   <Tabs defaultValue="summary">

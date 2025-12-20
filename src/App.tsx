@@ -15,6 +15,7 @@ import ComplianceQAPage from "./pages/dashboard/ComplianceQAPage";
 import FeaturesPage from "./pages/dashboard/FeaturesPage";
 import TechStackPage from "./pages/dashboard/TechStackPage";
 import TeamPage from "./pages/dashboard/TeamPage";
+import PipelineOverviewPage from "./pages/dashboard/PipelineOverviewPage";
 import NotificationsPage from "./pages/dashboard/NotificationsPage";
 import SettingsPage from "./pages/dashboard/SettingsPage";
 import HelpPage from "./pages/dashboard/HelpPage";
@@ -63,6 +64,9 @@ const App = () => (
               } />
               <Route path="/dashboard/team" element={
                 <ProtectedRoute><TeamPage /></ProtectedRoute>
+              } />
+              <Route path="/dashboard/pipeline" element={
+                <ProtectedRoute><PipelineOverviewPage /></ProtectedRoute>
               } />
               
               {/* Agent Routes */}
