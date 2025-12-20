@@ -1,17 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { usePipeline } from "@/contexts/PipelineContext";
 import {
   Play,
   CheckCircle,
   Loader2,
   ArrowRight,
   FileJson,
-  AlertTriangle,
-  ShieldCheck,
   Radio,
   FileText,
   Receipt,
@@ -41,15 +37,6 @@ interface AgentState {
 }
 
 export default function AutomationPage() {
-  const {
-    addRegulations,
-    addParsedClauses,
-    addTransactions,
-    addComplianceResults,
-    addAuditReport,
-    clearAll
-  } = usePipeline();
-
   const [agents, setAgents] = useState<AgentState[]>([
     { id: 1, name: "Regulation Monitoring", icon: Radio, status: "idle", logs: [], output: null, description: "Fetching latest regulations..." },
     { id: 2, name: "Legal Parsing", icon: FileText, status: "idle", logs: [], output: null, description: "Parsing regulations into rules..." },
@@ -59,7 +46,6 @@ export default function AutomationPage() {
   ]);
 
   const [isRunning, setIsRunning] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState(0);
 
   const updateAgent = (id: number, updates: Partial<AgentState>) => {
     setAgents(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
@@ -67,8 +53,6 @@ export default function AutomationPage() {
 
   const runAutomation = async () => {
     setIsRunning(true);
-    setCompletedSteps(0);
-    clearAll(); // Clear pipeline context
 
     // Reset agents
     setAgents(prev => prev.map(a => ({ ...a, status: "idle", logs: [], output: null })));
@@ -79,15 +63,14 @@ export default function AutomationPage() {
       await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate delay
 
       const regs = sampleRegulations;
-      addRegulations(regs);
 
       const agent1Output = {
         regulations_fetched: regs.map(r => ({
-          regulation_id: r.id,
-          name: r.title,
-          effective_date: r.date,
-          clauses: 5, // mock
-          source_url: r.source,
+          regulation_id: r.regulation_id,
+          name: r.name,
+          effective_date: r.effective_date,
+          clauses: r.clauses,
+          source_url: r.source_url,
           last_updated: r.last_updated
         })),
         total_regulations: regs.length,
@@ -99,7 +82,6 @@ export default function AutomationPage() {
         logs: ["Fetched 2 new regulations.", "Updates detected vs last fetch.", "Status: COMPLETE"],
         output: agent1Output
       });
-      setCompletedSteps(1);
 
 
       // --- AGENT 2: Legal Parser ---
@@ -107,7 +89,6 @@ export default function AutomationPage() {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const clauses = runAgent2Simulation(regs);
-      addParsedClauses(clauses);
 
       const agent2Output = {
         compliance_clauses: clauses,
@@ -120,7 +101,6 @@ export default function AutomationPage() {
         logs: [`Parsed ${clauses.length} clauses.`, "Identified transaction types: procurement, construction.", "Extracted thresholds and tax rates.", "Status: COMPLETE"],
         output: agent2Output
       });
-      setCompletedSteps(2);
 
 
       // --- AGENT 3: Transaction Understanding ---
@@ -128,11 +108,10 @@ export default function AutomationPage() {
       await new Promise(resolve => setTimeout(resolve, 1500));
 
       const txns = sampleTransactions;
-      addTransactions(txns);
 
       const agent3Output = {
         transaction_analysis: txns.map(t => ({
-          transaction_id: t.id,
+          transaction_id: t.transaction_id,
           amount: t.amount,
           vendor_name: t.vendor_name,
           category: t.category,
@@ -150,7 +129,6 @@ export default function AutomationPage() {
         logs: [`Processed ${txns.length} transactions.`, "Validated completeness: 85%", "Flagged 1 transaction with missing fields.", "Status: COMPLETE"],
         output: agent3Output
       });
-      setCompletedSteps(3);
 
 
       // --- AGENT 4: Compliance Mapping (CORE) ---
@@ -158,9 +136,8 @@ export default function AutomationPage() {
       await new Promise(resolve => setTimeout(resolve, 2500));
 
       const results = runAgent4Simulation(clauses, txns);
-      addComplianceResults(results);
 
-      const agent4Output = results; // Already in correct format
+      const agent4Output = results;
 
       updateAgent(4, {
         status: "complete",
@@ -172,7 +149,6 @@ export default function AutomationPage() {
         ],
         output: agent4Output
       });
-      setCompletedSteps(4);
 
 
       // --- AGENT 5: Auditor Assistant ---
@@ -180,7 +156,6 @@ export default function AutomationPage() {
       await new Promise(resolve => setTimeout(resolve, 1500));
 
       const reports = runAgent5Simulation(results, txns);
-      reports.forEach(r => addAuditReport(r));
 
       const agent5Output = reports;
 
@@ -189,7 +164,6 @@ export default function AutomationPage() {
         logs: [`Generated ${reports.length} audit reports.`, "Created actionable recommendations.", "Status: COMPLETE"],
         output: agent5Output
       });
-      setCompletedSteps(5);
 
       setIsRunning(false);
 

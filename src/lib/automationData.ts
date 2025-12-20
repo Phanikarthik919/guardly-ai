@@ -1,43 +1,137 @@
-import {
-  Regulation,
-  ParsedClause,
-  Transaction,
-  ComplianceResult,
-  AuditReport,
-  Violation,
-  Recommendation
-} from "@/contexts/PipelineContext";
+// Local interfaces for the Automation feature to match the prompt's specific snake_case schema
+// independent of the main app's PipelineContext to avoid breaking changes.
+
+// Agent 1 Output / Agent 2 Input
+export interface AutomationRegulation {
+  regulation_id: string;
+  name: string;
+  effective_date: string;
+  clauses: number;
+  source_url: string;
+  last_updated?: string;
+
+  // For internal logic mapping if needed
+  id?: string;
+  title?: string;
+  date?: string;
+  source?: string;
+}
+
+// Agent 2 Output / Agent 4 Input
+export interface AutomationClause {
+  clause_id: string;
+  regulation_id: string;
+  rule_name: string;
+  transaction_types: string[];
+  amount_threshold: number;
+  tax_rate?: number;
+  min_bids?: number;
+  required_documents: string[];
+  severity: 'high' | 'medium' | 'low';
+  description?: string;
+}
+
+// Agent 3 Output / Agent 4 Input
+export interface AutomationTransaction {
+  transaction_id: string;
+  amount: number;
+  vendor_name: string;
+  category: string;
+  department?: string;
+  tax_paid: number;
+  bids_count?: number;
+  documents_attached: string[];
+  data_completeness?: number;
+  missing_fields?: string[];
+
+  // Internal helper
+  id?: string;
+}
+
+// Agent 4 Output / Agent 5 Input
+export interface AutomationViolation {
+  type: 'TAX_MISMATCH' | 'BIDDING_REQUIREMENT' | 'MISSING_DOCUMENT';
+  clause_id: string;
+  severity: 'high' | 'medium' | 'low';
+  description: string;
+  expected_tax?: number;
+  claimed_tax?: number;
+  expected_bids?: number;
+  actual_bids?: number;
+  required_doc?: string;
+  corrective_action?: string;
+}
+
+export interface AutomationComplianceResult {
+  transaction_id: string;
+  compliance_status: 'VIOLATION' | 'COMPLIANT';
+  violations: AutomationViolation[];
+  overall_risk_score: number;
+  checked_at: string;
+}
+
+// Agent 5 Output
+export interface AutomationRecommendation {
+  violation_type: string;
+  action: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  deadline: string;
+}
+
+export interface AutomationAuditReport {
+  report_id: string;
+  transaction_id: string;
+  status: string;
+  summary: string;
+  violations: AutomationViolation[];
+  recommendations: AutomationRecommendation[];
+  risk_score: number;
+  transaction_details?: {
+    amount: number;
+    vendor: string;
+    category: string;
+    tax_paid: number;
+  };
+}
 
 // --- Agent 1 Data ---
-export const sampleRegulations: Regulation[] = [
+export const sampleRegulations: AutomationRegulation[] = [
   {
+    regulation_id: "2024_GST_CIRCULAR_045",
+    name: "CGST applicability on infrastructure supplies",
+    effective_date: "2024-12-01",
+    clauses: 5,
+    source_url: "https://gst.gov.in",
+    last_updated: "2024-12-20",
+
+    // Internal mapping helpers
     id: "2024_GST_CIRCULAR_045",
     title: "CGST applicability on infrastructure supplies",
     date: "2024-12-01",
-    version: "1.0",
-    content: "Circular regarding CGST rates for construction and infrastructure projects.",
-    source: "https://gst.gov.in",
-    last_updated: "2024-12-20"
+    source: "https://gst.gov.in"
   },
   {
+    regulation_id: "2024_PROCUREMENT_RULE_12",
+    name: "Competitive Bidding Requirements for Public Procurement",
+    effective_date: "2024-01-15",
+    clauses: 3,
+    source_url: "https://finance.gov.in",
+    last_updated: "2024-01-20",
+
     id: "2024_PROCUREMENT_RULE_12",
     title: "Competitive Bidding Requirements for Public Procurement",
     date: "2024-01-15",
-    version: "2.0",
-    content: "Guidelines for minimum number of bids required for public tenders.",
-    source: "https://finance.gov.in",
-    last_updated: "2024-01-20"
+    source: "https://finance.gov.in"
   }
 ];
 
 // --- Agent 2 Logic (Simulation) ---
-export const runAgent2Simulation = (regs: Regulation[]): ParsedClause[] => {
-  const clauses: ParsedClause[] = [];
+export const runAgent2Simulation = (regs: AutomationRegulation[]): AutomationClause[] => {
+  const clauses: AutomationClause[] = [];
 
   regs.forEach(reg => {
-    if (reg.id === "2024_GST_CIRCULAR_045") {
+    if (reg.regulation_id === "2024_GST_CIRCULAR_045") {
       clauses.push({
-        id: "2024_GST_CIRCULAR_045_CLAUSE_1",
         clause_id: "2024_GST_CIRCULAR_045_CLAUSE_1",
         regulation_id: "2024_GST_CIRCULAR_045",
         rule_name: "CGST@18% on infrastructure supplies",
@@ -48,9 +142,8 @@ export const runAgent2Simulation = (regs: Regulation[]): ParsedClause[] => {
         severity: "high",
         description: "For construction purchases >₹10L, GST must be 18%"
       });
-    } else if (reg.id === "2024_PROCUREMENT_RULE_12") {
+    } else if (reg.regulation_id === "2024_PROCUREMENT_RULE_12") {
        clauses.push({
-        id: "2024_PROCUREMENT_RULE_12_CLAUSE_1",
         clause_id: "2024_PROCUREMENT_RULE_12_CLAUSE_1",
         regulation_id: "2024_PROCUREMENT_RULE_12",
         rule_name: "Minimum 3 competitive bids",
@@ -67,9 +160,9 @@ export const runAgent2Simulation = (regs: Regulation[]): ParsedClause[] => {
 };
 
 // --- Agent 3 Data (Simulation) ---
-export const sampleTransactions: Transaction[] = [
+export const sampleTransactions: AutomationTransaction[] = [
   {
-    id: "TXN_2024_FINANCE_00145",
+    transaction_id: "TXN_2024_FINANCE_00145",
     amount: 2500000,
     vendor_name: "ABC Infrastructure Ltd.",
     category: "construction",
@@ -77,12 +170,12 @@ export const sampleTransactions: Transaction[] = [
     tax_paid: 125000,
     bids_count: 2,
     documents_attached: ["invoice.pdf", "grn.pdf"], // Missing project_order
-    date: "2024-12-25",
     data_completeness: 85,
-    missing_fields: ["project_order"]
+    missing_fields: ["project_order"],
+    id: "TXN_2024_FINANCE_00145"
   },
   {
-    id: "TXN_2024_FINANCE_00146",
+    transaction_id: "TXN_2024_FINANCE_00146",
     amount: 500000, // 5L (< 10L threshold)
     vendor_name: "TechSoft Solutions",
     category: "software",
@@ -90,16 +183,16 @@ export const sampleTransactions: Transaction[] = [
     tax_paid: 90000, // 18% of 5L = 90k
     bids_count: 1,
     documents_attached: ["invoice.pdf", "contract.pdf"],
-    date: "2024-12-26",
     data_completeness: 100,
-    missing_fields: []
+    missing_fields: [],
+    id: "TXN_2024_FINANCE_00146"
   }
 ];
 
 // --- Agent 4 Logic (CORE Compliance Mapping) ---
-export const runAgent4Simulation = (clauses: ParsedClause[], transactions: Transaction[]): ComplianceResult[] => {
+export const runAgent4Simulation = (clauses: AutomationClause[], transactions: AutomationTransaction[]): AutomationComplianceResult[] => {
   return transactions.map(txn => {
-    const violations: Violation[] = [];
+    const violations: AutomationViolation[] = [];
 
     clauses.forEach(clause => {
       // 1. Check applicability
@@ -141,11 +234,6 @@ export const runAgent4Simulation = (clauses: ParsedClause[], transactions: Trans
 
       // 4. MISSING_DOCUMENT
       if (clause.required_documents && clause.required_documents.length > 0) {
-         // This logic is tricky because "documents_attached" in transaction are filenames (e.g., "invoice.pdf"),
-         // while "required_documents" in clause are types (e.g., "invoice").
-         // For simulation, we'll check if any attached document *contains* the required type string.
-         // OR, consistent with sample data: TXN_00145 is missing "project_order".
-
          clause.required_documents.forEach(reqDoc => {
             const hasDoc = txn.documents_attached.some(doc => doc.toLowerCase().includes(reqDoc.toLowerCase()));
             if (!hasDoc) {
@@ -166,7 +254,7 @@ export const runAgent4Simulation = (clauses: ParsedClause[], transactions: Trans
     const riskScore = Math.min(violationCount * 0.3, 0.99);
 
     return {
-      transaction_id: txn.id,
+      transaction_id: txn.transaction_id,
       compliance_status: violationCount > 0 ? "VIOLATION" : "COMPLIANT",
       violations: violations,
       overall_risk_score: parseFloat(riskScore.toFixed(2)),
@@ -176,11 +264,11 @@ export const runAgent4Simulation = (clauses: ParsedClause[], transactions: Trans
 };
 
 // --- Agent 5 Logic (Auditor Assistant) ---
-export const runAgent5Simulation = (results: ComplianceResult[], transactions: Transaction[]): AuditReport[] => {
+export const runAgent5Simulation = (results: AutomationComplianceResult[], transactions: AutomationTransaction[]): AutomationAuditReport[] => {
   return results.filter(r => r.compliance_status === "VIOLATION").map(res => {
-    const txn = transactions.find(t => t.id === res.transaction_id)!;
+    const txn = transactions.find(t => t.transaction_id === res.transaction_id)!;
 
-    const recommendations: Recommendation[] = res.violations.map(v => ({
+    const recommendations: AutomationRecommendation[] = res.violations.map(v => ({
       violation_type: v.type,
       action: v.corrective_action || "Review transaction",
       priority: v.severity === "high" ? "HIGH" : "MEDIUM",

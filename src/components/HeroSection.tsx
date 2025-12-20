@@ -1,5 +1,6 @@
-import { Shield, ArrowRight, Zap } from "lucide-react";
+import { Shield, ArrowRight, Zap, Cpu } from "lucide-react";
 import { Button } from "./ui/button";
+import { Link } from "react-router-dom";
 
 const HeroSection = () => {
   return (
@@ -48,10 +49,12 @@ const HeroSection = () => {
           
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: "0.4s" }}>
-            <Button size="lg" className="group">
-              <Shield className="w-5 h-5 mr-2" />
-              View Demo
-              <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+            <Button size="lg" className="group" asChild>
+              <Link to="/automation">
+                <Cpu className="w-5 h-5 mr-2" />
+                Launch Master Automation
+                <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+              </Link>
             </Button>
             <Button size="lg" variant="outline">
               Read Documentation
