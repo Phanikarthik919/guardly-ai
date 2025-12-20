@@ -36,11 +36,21 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch active portals
-    const { data: portals, error: portalsError } = await supabase
-      .from('regulation_portals')
-      .select('*')
-      .eq('is_active', true);
+    // Parse request body for optional portal filter
+    let targetPortalId: string | null = null;
+    try {
+      const body = await req.json();
+      targetPortalId = body?.portalId || null;
+    } catch {
+      // No body or invalid JSON, crawl all
+    }
+
+    // Fetch active portals (optionally filter by ID for targeted crawl)
+    let query = supabase.from('regulation_portals').select('*').eq('is_active', true);
+    if (targetPortalId) {
+      query = query.eq('id', targetPortalId);
+    }
+    const { data: portals, error: portalsError } = await query;
 
     if (portalsError) {
       console.error('Error fetching portals:', portalsError);
@@ -83,15 +93,20 @@ serve(async (req) => {
         console.log(`Found ${urls.length} URLs for ${portal.name}`);
 
         // Filter URLs that might contain regulations/circulars
+        // EXCLUDE PDFs as they often timeout on government sites
         const regulationPatterns = [
           /circular/i, /notification/i, /order/i, /amendment/i,
           /act/i, /rule/i, /guideline/i, /press/i, /gazette/i,
           /faq/i, /instruction/i, /directive/i
         ];
 
-        const relevantUrls = urls.filter((url: string) => 
-          regulationPatterns.some(pattern => pattern.test(url))
-        ).slice(0, 10); // Limit to 10 per portal per run
+        const relevantUrls = urls.filter((url: string) => {
+          // Skip PDFs - they frequently timeout
+          if (url.toLowerCase().endsWith('.pdf')) return false;
+          // Skip Hindi pages to avoid duplicates
+          if (url.includes('/hindi/')) return false;
+          return regulationPatterns.some(pattern => pattern.test(url));
+        }).slice(0, 5); // Limit to 5 per portal to stay within edge function timeout
 
         console.log(`Filtered to ${relevantUrls.length} relevant URLs for ${portal.name}`);
 
@@ -105,24 +120,37 @@ serve(async (req) => {
               .eq('url', url)
               .single();
 
-            // Scrape the page
-            const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${firecrawlApiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                url,
-                formats: ['markdown'],
-                onlyMainContent: true,
-              }),
-            });
+            // Scrape the page with timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+            
+            let scrapeData;
+            try {
+              const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${firecrawlApiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  url,
+                  formats: ['markdown'],
+                  onlyMainContent: true,
+                  waitFor: 5000, // Wait max 5s for page load
+                }),
+                signal: controller.signal,
+              });
+              clearTimeout(timeoutId);
 
-            const scrapeData = await scrapeResponse.json();
+              scrapeData = await scrapeResponse.json();
 
-            if (!scrapeResponse.ok || !scrapeData.success) {
-              console.log(`Failed to scrape ${url}: ${scrapeData.error || 'Unknown error'}`);
+              if (!scrapeResponse.ok || !scrapeData.success) {
+                console.log(`Failed to scrape ${url}: ${scrapeData.error || 'Unknown error'}`);
+                continue;
+              }
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              console.log(`Scrape timeout/error for ${url}`);
               continue;
             }
 
