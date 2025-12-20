@@ -1,9 +1,13 @@
-import { Shield, Menu, X } from "lucide-react";
+import { Shield, Menu, X, LogIn } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const navLinks = [
     { label: "Problem", href: "#problem" },
@@ -42,8 +46,22 @@ const Navbar = () => {
           </div>
           
           {/* CTA */}
-          <div className="hidden md:block">
-            <Button size="sm">View Demo</Button>
+          <div className="hidden md:flex items-center gap-3">
+            {user ? (
+              <Button size="sm" onClick={() => navigate("/dashboard")}>
+                Dashboard
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/auth")}>
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Sign In
+                </Button>
+                <Button size="sm" onClick={() => navigate("/auth")}>
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
           
           {/* Mobile menu button */}
@@ -73,7 +91,15 @@ const Navbar = () => {
                   {link.label}
                 </a>
               ))}
-              <Button size="sm" className="w-full mt-2">View Demo</Button>
+              {user ? (
+                <Button size="sm" className="w-full mt-2" onClick={() => navigate("/dashboard")}>
+                  Dashboard
+                </Button>
+              ) : (
+                <Button size="sm" className="w-full mt-2" onClick={() => navigate("/auth")}>
+                  Sign In / Sign Up
+                </Button>
+              )}
             </div>
           </div>
         )}
