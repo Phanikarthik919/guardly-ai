@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      indexed_regulations: {
+        Row: {
+          category: string | null
+          content: string | null
+          content_hash: string | null
+          crawled_at: string
+          id: string
+          is_processed: boolean
+          published_date: string | null
+          source: string
+          summary: string | null
+          title: string | null
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          category?: string | null
+          content?: string | null
+          content_hash?: string | null
+          crawled_at?: string
+          id?: string
+          is_processed?: boolean
+          published_date?: string | null
+          source: string
+          summary?: string | null
+          title?: string | null
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          category?: string | null
+          content?: string | null
+          content_hash?: string | null
+          crawled_at?: string
+          id?: string
+          is_processed?: boolean
+          published_date?: string | null
+          source?: string
+          summary?: string | null
+          title?: string | null
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -38,6 +83,36 @@ export type Database = {
           email?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      regulation_portals: {
+        Row: {
+          base_url: string
+          category: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_crawled_at: string | null
+          name: string
+        }
+        Insert: {
+          base_url: string
+          category: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_crawled_at?: string | null
+          name: string
+        }
+        Update: {
+          base_url?: string
+          category?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_crawled_at?: string | null
+          name?: string
         }
         Relationships: []
       }
