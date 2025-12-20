@@ -1,5 +1,6 @@
 import { Shield, Bell, Settings, HelpCircle, User, Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ModeToggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +47,8 @@ export function TopNav() {
         </div>
 
         <div className="flex items-center gap-2">
+          <ModeToggle />
+
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-4 w-4" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />

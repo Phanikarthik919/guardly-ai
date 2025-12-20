@@ -17,7 +17,8 @@ import {
   MessageSquare,
   Sparkles,
   Cpu,
-  Users
+  Users,
+  Play
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { usePipeline } from "@/contexts/PipelineContext";

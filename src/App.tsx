@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PipelineProvider } from "@/contexts/PipelineContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { ProtectedRoute } from "@/components/dashboard/ProtectedRoute";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -35,9 +36,10 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <PipelineProvider>
-            <Toaster />
-            <Sonner />
-            <Routes>
+            <ThemeProvider defaultTheme="dark" storageKey="reguguard-ui-theme">
+              <Toaster />
+              <Sonner />
+              <Routes>
               <Route path="/" element={<Navigate to="/auth" replace />} />
               <Route path="/auth" element={<Auth />} />
               
@@ -105,6 +107,7 @@ const App = () => (
               
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </ThemeProvider>
           </PipelineProvider>
         </AuthProvider>
       </BrowserRouter>
