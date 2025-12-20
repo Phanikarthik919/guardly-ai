@@ -25,6 +25,8 @@ export interface MasterAgentProgress {
 
 interface UseMasterAgentOptions {
   onComplete?: (report: AuditReport) => void;
+  /** Minimum delay between API calls in ms (controls concurrency) */
+  minIntervalMs?: number;
 }
 
 export function useMasterAgent(options: UseMasterAgentOptions = {}) {
@@ -43,7 +45,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
 
   // Prevent request storms that trigger 429s
   const lastCallAtRef = useRef(0);
-  const MIN_AGENT_CALL_INTERVAL_MS = 450;
+  const minIntervalMs = options.minIntervalMs ?? 450;
 
   const addLog = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
     setProgress(prev => ({
@@ -66,8 +68,8 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
     // Simple client-side throttling
     const now = Date.now();
     const sinceLast = now - lastCallAtRef.current;
-    if (sinceLast < MIN_AGENT_CALL_INTERVAL_MS) {
-      await sleep(MIN_AGENT_CALL_INTERVAL_MS - sinceLast);
+    if (sinceLast < minIntervalMs) {
+      await sleep(minIntervalMs - sinceLast);
     }
     lastCallAtRef.current = Date.now();
 

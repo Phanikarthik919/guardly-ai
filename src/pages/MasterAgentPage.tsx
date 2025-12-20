@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { 
   Cpu, 
   Upload, 
@@ -18,7 +18,8 @@ import {
   Clock,
   TrendingUp,
   AlertCircle,
-  BarChart3
+  BarChart3,
+  Gauge
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,6 +29,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useMasterAgent, MasterAgentStep } from "@/hooks/useMasterAgent";
 import { Transaction, AuditReport } from "@/contexts/PipelineContext";
@@ -64,7 +67,16 @@ export default function MasterAgentPage() {
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const { complianceResults, parsedClauses } = usePipeline();
 
+  // Concurrency control: 1 = slow (2000ms), 5 = fast (200ms)
+  const [concurrencyLevel, setConcurrencyLevel] = useState<number[]>([2]); // default middle
+  const minIntervalMs = useMemo(() => {
+    // Map 1-5 to 2000ms - 200ms (slower = safer)
+    const level = concurrencyLevel[0] ?? 2;
+    return Math.round(2200 - level * 400);
+  }, [concurrencyLevel]);
+
   const { isRunning, progress, finalReport, runMasterAgent, reset } = useMasterAgent({
+    minIntervalMs,
     onComplete: (report) => {
       toast({ 
         title: 'Audit Complete!', 
@@ -267,6 +279,33 @@ export default function MasterAgentPage() {
                     </div>
                   </div>
                 )}
+
+                <Separator />
+
+                {/* Concurrency Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Gauge className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-sm font-medium">Speed / Rate Limit Safety</Label>
+                  </div>
+                  <Slider
+                    value={concurrencyLevel}
+                    onValueChange={setConcurrencyLevel}
+                    min={1}
+                    max={5}
+                    step={1}
+                    disabled={isRunning}
+                    className="py-2"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Slower (safer)</span>
+                    <span className="font-medium">Level {concurrencyLevel[0]}</span>
+                    <span>Faster</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {minIntervalMs}ms between calls. Use lower levels to avoid 429 rate limits.
+                  </p>
+                </div>
 
                 <Separator />
 
