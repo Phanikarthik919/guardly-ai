@@ -5,6 +5,7 @@ import SolutionSection from "@/components/SolutionSection";
 import ArchitectureSection from "@/components/ArchitectureSection";
 import FeaturesSection from "@/components/FeaturesSection";
 import TechStackSection from "@/components/TechStackSection";
+import ComplianceAgent from "@/components/ComplianceAgent";
 import TeamSection from "@/components/TeamSection";
 import Footer from "@/components/Footer";
 
@@ -27,6 +28,7 @@ const Index = () => {
           <FeaturesSection />
         </section>
         <TechStackSection />
+        <ComplianceAgent />
         <section id="team">
           <TeamSection />
         </section>
