@@ -134,13 +134,11 @@ export default function AutomationPage() {
         transaction_analysis: txns.map(t => ({
           transaction_id: t.id,
           amount: t.amount,
-          vendor_name: t.vendor_name,
+          vendor: t.vendor,
           category: t.category,
-          tax_paid: t.tax_paid,
-          bids_count: t.bids_count,
-          documents_attached: t.documents_attached,
-          data_completeness: t.data_completeness,
-          missing_fields: t.missing_fields
+          tax: t.tax,
+          date: t.date,
+          description: t.description
         })),
         agent_3_status: "COMPLETE"
       };
@@ -166,7 +164,7 @@ export default function AutomationPage() {
         status: "complete",
         logs: [
           `Analyzed ${results.length} transactions.`,
-          `Detected ${results.filter(r => r.compliance_status === "VIOLATION").length} violations.`,
+          `Detected ${results.filter(r => r.status === "violation").length} violations.`,
           "Calculated risk scores.",
           "Status: COMPLETE"
         ],
