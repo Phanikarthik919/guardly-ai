@@ -1,39 +1,56 @@
+import { useState } from "react";
 import { Bot, FileSearch, FileText, Scale, MessageSquare } from "lucide-react";
+import { AgentDemoModal } from "./AgentDemoModal";
 
-const agents = [
+type AgentType = 'regulation-monitor' | 'legal-parser' | 'transaction-understanding' | 'compliance-mapping' | 'auditor-assistant';
+
+const agents: Array<{
+  icon: typeof FileSearch;
+  name: string;
+  description: string;
+  color: string;
+  type: AgentType;
+}> = [
   {
     icon: FileSearch,
     name: "Regulation Monitoring",
     description: "Continuously fetches and indexes latest rules from 15+ government portals",
     color: "primary",
+    type: "regulation-monitor",
   },
   {
     icon: FileText,
     name: "Legal Parsing",
     description: "Converts unstructured regulations into machine-readable compliance clauses",
     color: "accent",
+    type: "legal-parser",
   },
   {
     icon: Bot,
     name: "Transaction Understanding",
     description: "Extracts and classifies financial transaction details using Document AI",
     color: "primary",
+    type: "transaction-understanding",
   },
   {
     icon: Scale,
     name: "Compliance Mapping",
     description: "RAG-based matching of transactions against relevant legal frameworks",
     color: "accent",
+    type: "compliance-mapping",
   },
   {
     icon: MessageSquare,
     name: "Auditor Assistant",
     description: "Generates explainable reports with corrective recommendations",
     color: "primary",
+    type: "auditor-assistant",
   },
 ];
 
 const SolutionSection = () => {
+  const [selectedAgent, setSelectedAgent] = useState<AgentType | null>(null);
+
   return (
     <section className="py-24 relative overflow-hidden">
       {/* Background accent */}
@@ -49,7 +66,7 @@ const SolutionSection = () => {
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Five specialized AI agents work autonomously to ensure real-time regulatory 
-            compliance without manual intervention.
+            compliance without manual intervention. <span className="text-primary">Click any agent to try it!</span>
           </p>
         </div>
         
@@ -71,14 +88,20 @@ const SolutionSection = () => {
                   </div>
                 )}
                 
-                <div className={`h-full p-6 rounded-2xl bg-card border border-border hover:border-${agent.color}/50 transition-all duration-300 hover:-translate-y-1`}>
-                  <div className={`w-14 h-14 rounded-xl bg-${agent.color}/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                    <agent.icon className={`w-7 h-7 text-${agent.color}`} />
+                <button
+                  onClick={() => setSelectedAgent(agent.type)}
+                  className={`w-full h-full p-6 rounded-2xl bg-card border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 cursor-pointer text-left`}
+                >
+                  <div className={`w-14 h-14 rounded-xl ${agent.color === 'primary' ? 'bg-primary/10' : 'bg-accent/10'} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                    <agent.icon className={`w-7 h-7 ${agent.color === 'primary' ? 'text-primary' : 'text-accent'}`} />
                   </div>
                   <div className="text-xs text-muted-foreground mb-2">Agent {index + 1}</div>
-                  <h3 className="text-lg font-semibold mb-2">{agent.name}</h3>
+                  <h3 className="text-lg font-semibold mb-2 text-foreground">{agent.name}</h3>
                   <p className="text-sm text-muted-foreground">{agent.description}</p>
-                </div>
+                  <div className="mt-3 text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                    Click to try →
+                  </div>
+                </button>
               </div>
             ))}
           </div>
@@ -107,6 +130,13 @@ const SolutionSection = () => {
           ))}
         </div>
       </div>
+
+      {/* Agent Demo Modal */}
+      <AgentDemoModal
+        isOpen={selectedAgent !== null}
+        onClose={() => setSelectedAgent(null)}
+        agentType={selectedAgent || 'regulation-monitor'}
+      />
     </section>
   );
 };
