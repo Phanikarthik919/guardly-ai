@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Receipt, Upload, Loader2, Plus, Trash2, Eye, Sparkles, FileText, X } from "lucide-react";
+import { Receipt, Upload, Loader2, Plus, Trash2, Eye, Sparkles, FileText, X, FileSpreadsheet } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AgentPageHeader } from "@/components/dashboard/AgentPageHeader";
 import { DataTable } from "@/components/dashboard/DataTable";
@@ -14,6 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import { TransactionStatsCards } from "@/components/agents/TransactionStatsCards";
 import { TransactionDetailModal } from "@/components/agents/TransactionDetailModal";
 import { useStreamingAgent } from "@/hooks/useStreamingAgent";
+import * as XLSX from "xlsx";
+
+type FileType = 'pdf' | 'excel' | 'csv' | null;
 
 export default function TransactionUnderstandingPage() {
   const { transactions, addTransactions, setTransactions } = usePipeline();
@@ -21,7 +24,8 @@ export default function TransactionUnderstandingPage() {
   const [textInput, setTextInput] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+  const [fileType, setFileType] = useState<FileType>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [manualTx, setManualTx] = useState({
     category: "",
@@ -52,6 +56,7 @@ export default function TransactionUnderstandingPage() {
             addTransactions(newTransactions);
             setTextInput("");
             setUploadedFile(null);
+            setFileType(null);
             toast({ title: `${newTransactions.length} transaction(s) extracted successfully` });
             return;
           }
@@ -74,16 +79,26 @@ export default function TransactionUnderstandingPage() {
       addTransactions([newTransaction]);
       setTextInput("");
       setUploadedFile(null);
+      setFileType(null);
       toast({ title: "Transaction extracted successfully" });
     }
   });
+
+  const getFileType = (file: File): FileType => {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension === 'pdf') return 'pdf';
+    if (extension === 'xlsx' || extension === 'xls') return 'excel';
+    if (extension === 'csv') return 'csv';
+    return null;
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'application/pdf') {
-      toast({ title: "Please upload a PDF file", variant: "destructive" });
+    const detectedType = getFileType(file);
+    if (!detectedType) {
+      toast({ title: "Unsupported file type", description: "Please upload PDF, Excel (.xlsx, .xls), or CSV files", variant: "destructive" });
       return;
     }
 
@@ -93,43 +108,140 @@ export default function TransactionUnderstandingPage() {
     }
 
     setUploadedFile(file);
-    toast({ title: `${file.name} selected`, description: "Click 'Extract from PDF' to process" });
+    setFileType(detectedType);
+    toast({ title: `${file.name} selected`, description: `Click 'Extract Transactions' to process` });
   };
 
-  const handleExtractFromPdf = async () => {
-    if (!uploadedFile) return;
+  const parseExcelOrCsv = async (file: File): Promise<Transaction[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: 'binary' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-    setIsProcessingPdf(true);
+          if (jsonData.length < 2) {
+            reject(new Error("File has no data rows"));
+            return;
+          }
+
+          // Get headers (first row)
+          const headers = jsonData[0].map((h: any) => String(h).toLowerCase().trim());
+          
+          // Map common header variations
+          const findColumn = (variations: string[]) => {
+            return headers.findIndex(h => variations.some(v => h.includes(v)));
+          };
+
+          const categoryIdx = findColumn(['category', 'type', 'transaction type']);
+          const amountIdx = findColumn(['amount', 'value', 'total', 'sum']);
+          const taxIdx = findColumn(['tax', 'gst', 'vat']);
+          const vendorIdx = findColumn(['vendor', 'party', 'name', 'from', 'to', 'payee', 'merchant']);
+          const dateIdx = findColumn(['date', 'transaction date', 'txn date']);
+          const descIdx = findColumn(['description', 'desc', 'narration', 'remarks', 'details']);
+
+          // Parse data rows
+          const transactions: Transaction[] = [];
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+
+            const amount = amountIdx >= 0 ? row[amountIdx] : row[1];
+            const vendor = vendorIdx >= 0 ? row[vendorIdx] : row[0];
+
+            if (!amount && !vendor) continue;
+
+            transactions.push({
+              id: crypto.randomUUID(),
+              category: categoryIdx >= 0 && row[categoryIdx] ? String(row[categoryIdx]) : "Expense",
+              amount: amount ? `₹${String(amount).replace(/[₹,]/g, '')}` : "₹0.00",
+              tax: taxIdx >= 0 && row[taxIdx] ? `₹${String(row[taxIdx]).replace(/[₹,]/g, '')}` : "₹0.00",
+              vendor: vendor ? String(vendor) : "Unknown",
+              date: dateIdx >= 0 && row[dateIdx] ? formatDate(row[dateIdx]) : new Date().toISOString().split('T')[0],
+              description: descIdx >= 0 && row[descIdx] ? String(row[descIdx]) : ""
+            });
+          }
+
+          resolve(transactions);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsBinaryString(file);
+    });
+  };
+
+  const formatDate = (value: any): string => {
+    if (!value) return new Date().toISOString().split('T')[0];
+    
+    // Handle Excel serial dates
+    if (typeof value === 'number') {
+      const date = XLSX.SSF.parse_date_code(value);
+      if (date) {
+        return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+      }
+    }
+    
+    // Try to parse string dates
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+    
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const handleExtractFromFile = async () => {
+    if (!uploadedFile || !fileType) return;
+
+    setIsProcessingFile(true);
     clearResponse();
 
     try {
-      // Read PDF as base64
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          const base64 = result.split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-      });
-      reader.readAsDataURL(uploadedFile);
-      const base64Data = await base64Promise;
+      if (fileType === 'excel' || fileType === 'csv') {
+        // Direct parsing for structured files
+        const extractedTransactions = await parseExcelOrCsv(uploadedFile);
+        if (extractedTransactions.length > 0) {
+          addTransactions(extractedTransactions);
+          toast({ title: `${extractedTransactions.length} transaction(s) imported from ${fileType.toUpperCase()}` });
+        } else {
+          toast({ title: "No transactions found in file", variant: "destructive" });
+        }
+        setUploadedFile(null);
+        setFileType(null);
+      } else {
+        // PDF - use AI agent
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(uploadedFile);
+        const base64Data = await base64Promise;
 
-      // Send to AI agent with PDF content
-      await runAgent('agent-transaction-understanding', {
-        transactionData: `[PDF DOCUMENT: ${uploadedFile.name}]\n\nPlease extract all financial transactions from this document. The document is provided as base64 encoded PDF. Extract transaction details including: category, amount, tax, vendor, date, and description. Return the transactions as a JSON array.\n\nBase64 PDF (first 5000 chars): ${base64Data.slice(0, 5000)}`
-      });
+        await runAgent('agent-transaction-understanding', {
+          transactionData: `[PDF DOCUMENT: ${uploadedFile.name}]\n\nPlease extract all financial transactions from this document. Extract transaction details including: category, amount, tax, vendor, date, and description. Return the transactions as a JSON array.\n\nBase64 PDF (first 5000 chars): ${base64Data.slice(0, 5000)}`
+        });
+      }
     } catch (error) {
-      console.error("Error processing PDF:", error);
-      toast({ title: "Error processing PDF", variant: "destructive" });
+      console.error("Error processing file:", error);
+      toast({ title: "Error processing file", description: String(error), variant: "destructive" });
     } finally {
-      setIsProcessingPdf(false);
+      setIsProcessingFile(false);
     }
   };
 
   const handleRemoveFile = () => {
     setUploadedFile(null);
+    setFileType(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -141,6 +253,11 @@ export default function TransactionUnderstandingPage() {
     await runAgent('agent-transaction-understanding', {
       transactionData: `Please extract all financial transactions from the following text. Return as a JSON array with fields: category, amount, tax, vendor, date, description.\n\n${textInput.slice(0, 3000)}`
     });
+  };
+
+  const getFileIcon = () => {
+    if (fileType === 'excel' || fileType === 'csv') return <FileSpreadsheet className="h-5 w-5 text-green-600 shrink-0" />;
+    return <FileText className="h-5 w-5 text-primary shrink-0" />;
   };
 
   const handleAddManual = () => {
@@ -258,25 +375,25 @@ export default function TransactionUnderstandingPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-1 space-y-4">
-          {/* PDF Upload Card */}
+          {/* File Upload Card */}
           <Card className="border-primary/20">
             <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent">
               <CardTitle className="text-lg flex items-center gap-2">
-                <FileText className="h-4 w-4 text-primary" />
-                Upload PDF Document
+                <Upload className="h-4 w-4 text-primary" />
+                Upload Document
               </CardTitle>
               <CardDescription>
-                Upload invoices, receipts, or transaction statements
+                Upload PDF, Excel (.xlsx, .xls), or CSV files
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.xlsx,.xls,.csv"
                 onChange={handleFileUpload}
                 className="hidden"
-                id="pdf-upload"
+                id="file-upload"
               />
               
               {!uploadedFile ? (
@@ -286,17 +403,20 @@ export default function TransactionUnderstandingPage() {
                 >
                   <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    Click to upload PDF
+                    Click to upload file
                   </p>
                   <p className="text-xs text-muted-foreground/70 mt-1">
-                    Max 10MB
+                    PDF, Excel, CSV • Max 10MB
                   </p>
                 </div>
               ) : (
                 <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/20">
                   <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="h-5 w-5 text-primary shrink-0" />
-                    <span className="text-sm truncate">{uploadedFile.name}</span>
+                    {getFileIcon()}
+                    <div className="min-w-0">
+                      <span className="text-sm truncate block">{uploadedFile.name}</span>
+                      <span className="text-xs text-muted-foreground">{fileType?.toUpperCase()}</span>
+                    </div>
                   </div>
                   <Button variant="ghost" size="icon" onClick={handleRemoveFile} className="shrink-0">
                     <X className="h-4 w-4" />
@@ -306,15 +426,15 @@ export default function TransactionUnderstandingPage() {
 
               <Button 
                 className="w-full" 
-                onClick={handleExtractFromPdf}
-                disabled={isLoading || isProcessingPdf || !uploadedFile}
+                onClick={handleExtractFromFile}
+                disabled={isLoading || isProcessingFile || !uploadedFile}
               >
-                {(isLoading || isProcessingPdf) ? (
+                {(isLoading || isProcessingFile) ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Receipt className="h-4 w-4 mr-2" />
                 )}
-                Extract from PDF
+                Extract Transactions
               </Button>
             </CardContent>
           </Card>
