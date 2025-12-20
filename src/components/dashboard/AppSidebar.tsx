@@ -6,6 +6,7 @@ import {
   Receipt, 
   GitCompare, 
   ClipboardCheck,
+  Play,
   Settings,
   HelpCircle,
   Bell,
@@ -88,6 +89,13 @@ const agents = [
     icon: ClipboardCheck,
     description: "Generate audit reports",
     dataKey: "auditReports" as const
+  },
+  {
+    title: "Automate All",
+    url: "/agents/automation",
+    icon: Play,
+    description: "Run full pipeline",
+    dataKey: "auditReports" as const // Dummy key
   },
 ];
 
