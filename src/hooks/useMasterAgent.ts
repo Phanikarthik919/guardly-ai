@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { usePipeline, Regulation, ParsedClause, Transaction, ComplianceResult, AuditReport } from '@/contexts/PipelineContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -41,6 +41,10 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
     detectedCategories: [],
   });
 
+  // Prevent request storms that trigger 429s
+  const lastCallAtRef = useRef(0);
+  const MIN_AGENT_CALL_INTERVAL_MS = 450;
+
   const addLog = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
     setProgress(prev => ({
       ...prev,
@@ -59,53 +63,77 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
   }, []);
 
   const callAgent = async (functionName: string, body: Record<string, unknown>): Promise<string> => {
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`,
-      {
+    // Simple client-side throttling
+    const now = Date.now();
+    const sinceLast = now - lastCallAtRef.current;
+    if (sinceLast < MIN_AGENT_CALL_INTERVAL_MS) {
+      await sleep(MIN_AGENT_CALL_INTERVAL_MS - sinceLast);
+    }
+    lastCallAtRef.current = Date.now();
+
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`;
+
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
-      }
-    );
+      });
 
-    if (!response.ok) {
-      throw new Error(`Agent ${functionName} failed: ${response.statusText}`);
-    }
+      if (response.ok) {
+        const reader = response.body?.getReader();
+        if (!reader) return '';
 
-    const reader = response.body?.getReader();
-    if (!reader) return '';
+        const decoder = new TextDecoder();
+        let result = '';
+        let buffer = '';
 
-    const decoder = new TextDecoder();
-    let result = '';
-    let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (line.startsWith('data:')) {
-          const jsonStr = line.slice(5).trim();
-          if (jsonStr === '[DONE]') continue;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) result += content;
-          } catch {
-            // Ignore parse errors
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const jsonStr = line.slice(5).trim();
+              if (jsonStr === '[DONE]') continue;
+              try {
+                const parsed = JSON.parse(jsonStr);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) result += content;
+              } catch {
+                // Ignore parse errors
+              }
+            }
           }
         }
+
+        return result;
       }
+
+      // Handle rate limiting with backoff
+      if (response.status === 429 && attempt < maxRetries) {
+        const retryAfterHeader = response.headers.get('retry-after');
+        const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : 0;
+        const backoffMs = Math.min(15000, 800 * 2 ** attempt + Math.floor(Math.random() * 250));
+        const waitMs = Math.max(retryAfterMs, backoffMs);
+        addLog('warning', `Rate limited (429) on ${functionName}. Retrying in ${Math.ceil(waitMs / 1000)}s...`);
+        await sleep(waitMs);
+        continue;
+      }
+
+      const errorText = await readResponseError(response);
+      throw new Error(`Agent ${functionName} failed (${response.status}): ${errorText}`);
     }
 
-    return result;
+    throw new Error(`Agent ${functionName} failed: rate limit exceeded`);
   };
 
   // Detect transaction categories for regulation filtering
@@ -418,7 +446,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
       updateProgress('error', message);
       addLog('error', message);
       toast({ title: 'Audit failed', description: message, variant: 'destructive' });
-      throw error;
+      return null;
     } finally {
       setIsRunning(false);
     }
@@ -443,6 +471,18 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
     runMasterAgent,
     reset,
   };
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function readResponseError(resp: Response): Promise<string> {
+  const contentType = resp.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await resp.json().catch(() => ({} as any));
+    return (data?.error || data?.message || JSON.stringify(data) || resp.statusText || 'Unknown error').toString();
+  }
+  const text = await resp.text().catch(() => '');
+  return text || resp.statusText || 'Unknown error';
 }
 
 // Helper functions
