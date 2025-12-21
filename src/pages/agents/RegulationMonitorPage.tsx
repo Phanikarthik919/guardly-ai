@@ -42,7 +42,8 @@ import { useStreamingAgent } from "@/hooks/useStreamingAgent";
 import { useToast } from "@/hooks/use-toast";
 import { RegulationDetailModal } from "@/components/agents/RegulationDetailModal";
 import { RegulationStatsCards } from "@/components/agents/RegulationStatsCards";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/clientRuntime";
+import { getSupabasePublicConfig } from "@/lib/publicConfig";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface IndexedRegulation {
@@ -167,12 +168,12 @@ export default function RegulationMonitorPage() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/regulation-crawler`,
+        `${getSupabasePublicConfig().url}/functions/v1/regulation-crawler`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${getSupabasePublicConfig().publishableKey}`,
           },
           body: JSON.stringify({ stream: true }),
         }
