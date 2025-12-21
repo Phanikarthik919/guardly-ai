@@ -298,28 +298,68 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
       pipeline.setRegulations(regulations);
       addLog('success', `Loaded ${regulations.length} regulations for compliance checking`);
 
-      // ====== STEP 3: PARSE REGULATIONS INTO CLAUSES ======
+      // ====== STEP 3: PARSE REGULATIONS INTO CLAUSES (WITH CACHING) ======
       updateProgress('parsing_clauses', 'Parsing legal clauses...', 0, regulations.length);
-      addLog('info', 'Starting legal parsing (AI Agent)');
+      addLog('info', 'Checking clause cache & parsing uncached regulations');
 
       const allClauses: ParsedClause[] = [];
+
+      // Pull cached clauses from DB for all regulations at once
+      const regulationIds = regulations.map((r) => r.id);
+      const { data: cachedRows, error: cacheErr } = await supabase
+        .from('parsed_clauses')
+        .select('*')
+        .in('regulation_id', regulationIds);
+
+      if (cacheErr) {
+        addLog('warning', `Cache fetch failed: ${cacheErr.message}`);
+      }
+
+      // Build lookup: regulation_id -> cached clauses
+      const cacheMap = new Map<string, typeof cachedRows>();
+      if (cachedRows && cachedRows.length > 0) {
+        for (const row of cachedRows) {
+          const existing = cacheMap.get(row.regulation_id) || [];
+          existing.push(row);
+          cacheMap.set(row.regulation_id, existing);
+        }
+      }
+
       for (let i = 0; i < regulations.length; i++) {
         const reg = regulations[i];
         updateProgress('parsing_clauses', `Parsing: ${reg.title.slice(0, 50)}...`, i + 1, regulations.length);
-
         const sourcePrefix = reg.source.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10);
 
+        // Check cache first
+        const cachedClauses = cacheMap.get(reg.id);
+        if (cachedClauses && cachedClauses.length > 0) {
+          const clauses: ParsedClause[] = cachedClauses.map((c) => ({
+            id: c.id,
+            regulationId: c.regulation_id,
+            clauseId: c.clause_id,
+            rule: c.rule,
+            conditions: c.conditions ?? '',
+            penalties: c.penalties ?? '',
+          }));
+          allClauses.push(...clauses);
+          addLog('info', `Cache hit: ${reg.title.slice(0, 40)}... → ${clauses.length} clauses`);
+          continue;
+        }
+
+        // No cache -> call AI
         try {
           const aiResponse = await callAgent('agent-legal-parser', {
-            text: `### ${reg.title}\nSource: ${reg.source}\nDate: ${reg.date}\n\n${reg.content.slice(0, 4000)}`
+            text: `### ${reg.title}\nSource: ${reg.source}\nDate: ${reg.date}\n\n${reg.content.slice(0, 4000)}`,
           });
 
-          const clauses: ParsedClause[] = [
+          const newClauses: ParsedClause[] = [
             {
               id: crypto.randomUUID(),
               regulationId: reg.id,
               clauseId: `${sourcePrefix}_${String(i * 2 + 1).padStart(3, '0')}`,
-              rule: extractRule(aiResponse) || `IF entity_type = 'registered_business' AND transaction_value > threshold THEN file_compliance_report WITHIN deadline`,
+              rule:
+                extractRule(aiResponse) ||
+                `IF entity_type = 'registered_business' AND transaction_value > threshold THEN file_compliance_report WITHIN deadline`,
               conditions: extractConditions(aiResponse) || `Applicable under ${reg.source} regulations`,
               penalties: extractPenalties(aiResponse) || `Non-compliance penalty as per ${reg.source} guidelines`,
             },
@@ -330,35 +370,31 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
               rule: `IF document_type = 'financial_record' THEN maintain_records FOR period_years = 8`,
               conditions: `All financial documents must be maintained in prescribed format with digital signatures`,
               penalties: `Documentation penalty: ₹5,000 per day of non-compliance`,
-            }
-          ];
-
-          allClauses.push(...clauses);
-          addLog('success', `Parsed: ${reg.title.slice(0, 40)}... → ${clauses.length} clauses`);
-        } catch (err) {
-          // IMPORTANT: Never block the entire audit due to AI rate limits.
-          // If parsing fails, create deterministic fallback clauses so the audit report still has output.
-          const clauses: ParsedClause[] = [
-            {
-              id: crypto.randomUUID(),
-              regulationId: reg.id,
-              clauseId: `${sourcePrefix}_${String(i * 2 + 1).padStart(3, '0')}`,
-              rule: `IF transaction_amount > 0 THEN perform_compliance_review WITHIN days = 30`,
-              conditions: `Fallback clause (AI unavailable) for ${reg.source}: ${reg.title.slice(0, 120)}`,
-              penalties: `Manual review required; follow ${reg.source} guidance and retain evidence.`,
             },
-            {
-              id: crypto.randomUUID(),
-              regulationId: reg.id,
-              clauseId: `${sourcePrefix}_${String(i * 2 + 2).padStart(3, '0')}`,
-              rule: `IF transaction_type IN ('procurement','payment','transfer') THEN maintain_records FOR period_years = 8`,
-              conditions: `Fallback clause to ensure the audit can proceed even during rate limits.`,
-              penalties: `Documentation gaps may lead to penalties under applicable ${reg.source} rules.`,
-            }
           ];
 
-          allClauses.push(...clauses);
-          addLog('warning', `AI parse failed; used fallback clauses: ${reg.title.slice(0, 40)}...`);
+          // Persist to cache (upsert)
+          const toInsert = newClauses.map((c) => ({
+            id: c.id,
+            regulation_id: c.regulationId,
+            clause_id: c.clauseId,
+            rule: c.rule,
+            conditions: c.conditions,
+            penalties: c.penalties,
+          }));
+
+          supabase
+            .from('parsed_clauses')
+            .upsert(toInsert, { onConflict: 'regulation_id,clause_id' })
+            .then(({ error }) => {
+              if (error) console.error('Clause cache insert failed:', error);
+            });
+
+          allClauses.push(...newClauses);
+          addLog('success', `Parsed: ${reg.title.slice(0, 40)}... → ${newClauses.length} clauses`);
+        } catch (err) {
+          // If AI fails after retries, throw so the audit stops instead of producing inaccurate fallback
+          throw err;
         }
       }
 
