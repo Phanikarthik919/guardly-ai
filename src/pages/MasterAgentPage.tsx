@@ -73,10 +73,10 @@ export default function MasterAgentPage() {
   // Concurrency control: 1 = slower (safer), 5 = faster
   const [concurrencyLevel, setConcurrencyLevel] = useState<number[]>([1]); // default safe
   const minIntervalMs = useMemo(() => {
-    // Map 1-5 to ~2000ms - 200ms, but clamp to avoid request storms
+    // Map 1-5 to ~3800ms - 1000ms (slower = much safer for Gemini quotas)
     const level = concurrencyLevel[0] ?? 1;
-    const computed = Math.round(2200 - level * 400);
-    return Math.max(600, computed);
+    const computed = Math.round(4500 - level * 700);
+    return Math.max(1000, computed);
   }, [concurrencyLevel]);
 
   const { isRunning, isPaused, progress, finalReport, runMasterAgent, reset, pause, resume } = useMasterAgent({
