@@ -70,12 +70,13 @@ export default function MasterAgentPage() {
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const { complianceResults, parsedClauses } = usePipeline();
 
-  // Concurrency control: 1 = slow (2000ms), 5 = fast (200ms)
-  const [concurrencyLevel, setConcurrencyLevel] = useState<number[]>([2]); // default middle
+  // Concurrency control: 1 = slower (safer), 5 = faster
+  const [concurrencyLevel, setConcurrencyLevel] = useState<number[]>([1]); // default safe
   const minIntervalMs = useMemo(() => {
-    // Map 1-5 to 2000ms - 200ms (slower = safer)
-    const level = concurrencyLevel[0] ?? 2;
-    return Math.round(2200 - level * 400);
+    // Map 1-5 to ~2000ms - 200ms, but clamp to avoid request storms
+    const level = concurrencyLevel[0] ?? 1;
+    const computed = Math.round(2200 - level * 400);
+    return Math.max(600, computed);
   }, [concurrencyLevel]);
 
   const { isRunning, isPaused, progress, finalReport, runMasterAgent, reset, pause, resume } = useMasterAgent({

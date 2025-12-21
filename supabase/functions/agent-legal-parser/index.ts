@@ -34,43 +34,80 @@ serve(async (req) => {
   try {
     const { text } = await req.json();
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    
+
     if (!GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
     console.log("Legal Parser Agent processing text of length:", text?.length);
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `${SYSTEM_PROMPT}\n\nParse the following regulatory text into structured compliance clauses:\n\n${text}` }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // Retry Gemini calls on 429/503 to avoid failing the whole audit during bursts.
+    const maxRetries = 4;
+    let response: Response | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
-        }),
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: `${SYSTEM_PROMPT}\n\nParse the following regulatory text into structured compliance clauses:\n\n${text}`,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 2048,
+            },
+          }),
+        }
+      );
+
+      if (response.ok) break;
+
+      // Backoff on Gemini quota / transient overload
+      if ((response.status === 429 || response.status === 503) && attempt < maxRetries) {
+        const backoffMs = Math.min(30000, 1200 * 2 ** attempt + Math.floor(Math.random() * 400));
+        console.warn(
+          `Gemini returned ${response.status} for agent-legal-parser (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${Math.ceil(backoffMs / 1000)}s...`
+        );
+        await sleep(backoffMs);
+        continue;
       }
-    );
+
+      break;
+    }
+
+    if (!response) {
+      throw new Error("Failed to call Gemini");
+    }
 
     if (!response.ok) {
       if (response.status === 429) {
+        const errorText = await response.text().catch(() => "");
+        console.error("Gemini API 429 (rate limited):", errorText);
         return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), {
           status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Retry-After": "15",
+          },
         });
       }
-      const errorText = await response.text();
+
+      const errorText = await response.text().catch(() => "");
       console.error("Gemini API error:", response.status, errorText);
       return new Response(JSON.stringify({ error: "AI API error" }), {
         status: 500,

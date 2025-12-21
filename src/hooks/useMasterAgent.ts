@@ -95,7 +95,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
   const callAgent = async (functionName: string, body: Record<string, unknown>): Promise<string> => {
     // Check if paused before making call
     await checkPause();
-    
+
     // Simple client-side throttling
     const now = Date.now();
     const sinceLast = now - lastCallAtRef.current;
@@ -104,24 +104,17 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
     }
     lastCallAtRef.current = Date.now();
 
-    const { url: supabaseUrl } = getSupabasePublicConfig();
-    const url = `${supabaseUrl}/functions/v1/${functionName}`;
+    const { url: backendUrl, publishableKey } = getSupabasePublicConfig();
+    const url = `${backendUrl}/functions/v1/${functionName}`;
 
-    // Get the current user's session token for authenticated API calls
-    const { data: { session } } = await supabase.auth.getSession();
-    const authToken = session?.access_token;
-    
-    if (!authToken) {
-      throw new Error('Not authenticated. Please log in to run the audit.');
-    }
-
-    const maxRetries = 3;
+    // Functions are public; use the publishable key so we never depend on expiring user sessions.
+    const maxRetries = 6;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
+          Authorization: `Bearer ${publishableKey}`,
         },
         body: JSON.stringify(body),
       });
@@ -164,7 +157,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
       if (response.status === 429 && attempt < maxRetries) {
         const retryAfterHeader = response.headers.get('retry-after');
         const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : 0;
-        const backoffMs = Math.min(15000, 800 * 2 ** attempt + Math.floor(Math.random() * 250));
+        const backoffMs = Math.min(60000, 1500 * 2 ** attempt + Math.floor(Math.random() * 500));
         const waitMs = Math.max(retryAfterMs, backoffMs);
         addLog('warning', `Rate limited (429) on ${functionName}. Retrying in ${Math.ceil(waitMs / 1000)}s...`);
         await sleep(waitMs);
