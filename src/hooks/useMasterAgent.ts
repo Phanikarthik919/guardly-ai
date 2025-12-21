@@ -401,59 +401,81 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
       pipeline.setParsedClauses(allClauses);
       addLog('success', `Parsing complete: ${allClauses.length} compliance clauses extracted`);
 
-      // ====== STEP 4: COMPLIANCE MAPPING ======
+      // ====== STEP 4: COMPLIANCE MAPPING (CHUNKED FOR RATE LIMITS) ======
+      const CHUNK_SIZE = 3; // Process 3 transactions per chunk
+      const CHUNK_DELAY_MS = 2000; // 2 second delay between chunks
+      
+      const totalChunks = Math.ceil(inputTransactions.length / CHUNK_SIZE);
       updateProgress('mapping_compliance', 'Running compliance checks...', 0, inputTransactions.length);
-      addLog('info', `Starting compliance mapping: ${inputTransactions.length} transactions × ${allClauses.length} clauses`);
+      addLog('info', `Starting compliance mapping: ${inputTransactions.length} transactions in ${totalChunks} chunks (${CHUNK_SIZE} per chunk)`);
 
       const complianceResults: ComplianceResult[] = [];
       
-      // Smart matching: only check relevant clauses per transaction
-      for (let i = 0; i < inputTransactions.length; i++) {
-        const tx = inputTransactions[i];
-        updateProgress('mapping_compliance', `Checking: ${tx.vendor}`, i + 1, inputTransactions.length);
+      // Process transactions in sequential chunks to avoid rate limits
+      for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+        const chunkStart = chunkIdx * CHUNK_SIZE;
+        const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, inputTransactions.length);
+        const chunkTransactions = inputTransactions.slice(chunkStart, chunkEnd);
+        
+        addLog('info', `Processing chunk ${chunkIdx + 1}/${totalChunks} (transactions ${chunkStart + 1}-${chunkEnd})`);
+        
+        // Process each transaction in this chunk sequentially
+        for (let i = 0; i < chunkTransactions.length; i++) {
+          const tx = chunkTransactions[i];
+          const globalIdx = chunkStart + i;
+          updateProgress('mapping_compliance', `Chunk ${chunkIdx + 1}/${totalChunks}: ${tx.vendor}`, globalIdx + 1, inputTransactions.length);
 
-        // Find relevant clauses for this transaction
-        const txCategories = detectCategories([tx]);
-        const relevantClauses = allClauses.slice(0, Math.min(5, allClauses.length)); // Limit for performance
+          // Find relevant clauses for this transaction (limit to 3 for rate limit safety)
+          const relevantClauses = allClauses.slice(0, Math.min(3, allClauses.length));
 
-        for (const clause of relevantClauses) {
-          try {
-            const aiResponse = await callAgent('agent-compliance-mapping', {
-              transaction: {
-                id: tx.id,
-                category: tx.category,
-                amount: tx.amount,
-                tax: tx.tax,
-                vendor: tx.vendor,
-                description: tx.description,
-                date: tx.date
-              },
-              clause: {
-                clauseId: clause.clauseId,
-                rule: clause.rule,
-                conditions: clause.conditions,
-                penalties: clause.penalties
-              }
-            });
+          for (const clause of relevantClauses) {
+            try {
+              const aiResponse = await callAgent('agent-compliance-mapping', {
+                transaction: {
+                  id: tx.id,
+                  category: tx.category,
+                  amount: tx.amount,
+                  tax: tx.tax,
+                  vendor: tx.vendor,
+                  description: tx.description,
+                  date: tx.date
+                },
+                clause: {
+                  clauseId: clause.clauseId,
+                  rule: clause.rule,
+                  conditions: clause.conditions,
+                  penalties: clause.penalties
+                }
+              });
 
-            const result = parseComplianceResult(aiResponse, tx.id, clause.id);
-            complianceResults.push(result);
-            
-            const statusEmoji = result.status === 'compliant' ? '✓' : result.status === 'violation' ? '✗' : '⚠';
-            addLog(
-              result.status === 'compliant' ? 'success' : result.status === 'violation' ? 'error' : 'warning',
-              `${statusEmoji} ${tx.vendor} vs ${clause.clauseId}: ${result.status}`
-            );
-          } catch (err) {
-            complianceResults.push({
-              id: crypto.randomUUID(),
-              transactionId: tx.id,
-              clauseId: clause.id,
-              status: 'warning',
-              riskLevel: 'medium',
-              reasoning: 'Compliance check could not be completed automatically. Manual review required.',
-            });
+              const result = parseComplianceResult(aiResponse, tx.id, clause.id);
+              complianceResults.push(result);
+              
+              const statusEmoji = result.status === 'compliant' ? '✓' : result.status === 'violation' ? '✗' : '⚠';
+              addLog(
+                result.status === 'compliant' ? 'success' : result.status === 'violation' ? 'error' : 'warning',
+                `${statusEmoji} ${tx.vendor} vs ${clause.clauseId}: ${result.status}`
+              );
+              
+              // Small delay between individual calls within a chunk
+              await sleep(500);
+            } catch (err) {
+              complianceResults.push({
+                id: crypto.randomUUID(),
+                transactionId: tx.id,
+                clauseId: clause.id,
+                status: 'warning',
+                riskLevel: 'medium',
+                reasoning: 'Compliance check could not be completed automatically. Manual review required.',
+              });
+            }
           }
+        }
+        
+        // Delay between chunks to respect rate limits (skip after last chunk)
+        if (chunkIdx < totalChunks - 1) {
+          addLog('info', `Waiting ${CHUNK_DELAY_MS / 1000}s before next chunk...`);
+          await sleep(CHUNK_DELAY_MS);
         }
       }
 
