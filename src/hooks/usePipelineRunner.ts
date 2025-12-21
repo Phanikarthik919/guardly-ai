@@ -39,7 +39,8 @@ export function usePipelineRunner(options: UsePipelineRunnerOptions = {}) {
   });
 
   const lastCallAtRef = useRef(0);
-  const MIN_AGENT_CALL_INTERVAL_MS = 450;
+  // Avoid triggering upstream model quotas during pipeline runs.
+  const MIN_AGENT_CALL_INTERVAL_MS = 1500;
 
   const addLog = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
     setProgress(prev => ({

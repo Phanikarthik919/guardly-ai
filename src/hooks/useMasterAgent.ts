@@ -265,7 +265,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
         });
 
         if (filtered.length > 0) {
-          regulations = filtered.slice(0, 15).map(reg => ({
+          regulations = filtered.slice(0, 5).map(reg => ({
             id: reg.id,
             source: reg.source,
             title: reg.title || 'Untitled Regulation',
@@ -277,7 +277,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
           addLog('success', `Found ${regulations.length} regulations matching categories: ${categories.join(', ')}`);
         } else {
           // Fallback to all regulations if no category match
-          regulations = filteredRegs.slice(0, 10).map(reg => ({
+          regulations = filteredRegs.slice(0, 5).map(reg => ({
             id: reg.id,
             source: reg.source,
             title: reg.title || 'Untitled Regulation',
@@ -307,12 +307,13 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
         const reg = regulations[i];
         updateProgress('parsing_clauses', `Parsing: ${reg.title.slice(0, 50)}...`, i + 1, regulations.length);
 
+        const sourcePrefix = reg.source.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10);
+
         try {
-          const aiResponse = await callAgent('agent-legal-parser', { 
-            text: `### ${reg.title}\nSource: ${reg.source}\nDate: ${reg.date}\n\n${reg.content.slice(0, 4000)}` 
+          const aiResponse = await callAgent('agent-legal-parser', {
+            text: `### ${reg.title}\nSource: ${reg.source}\nDate: ${reg.date}\n\n${reg.content.slice(0, 4000)}`
           });
 
-          const sourcePrefix = reg.source.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10);
           const clauses: ParsedClause[] = [
             {
               id: crypto.randomUUID(),
@@ -331,10 +332,33 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
               penalties: `Documentation penalty: ₹5,000 per day of non-compliance`,
             }
           ];
+
           allClauses.push(...clauses);
           addLog('success', `Parsed: ${reg.title.slice(0, 40)}... → ${clauses.length} clauses`);
         } catch (err) {
-          addLog('warning', `Failed to parse: ${reg.title.slice(0, 40)}...`);
+          // IMPORTANT: Never block the entire audit due to AI rate limits.
+          // If parsing fails, create deterministic fallback clauses so the audit report still has output.
+          const clauses: ParsedClause[] = [
+            {
+              id: crypto.randomUUID(),
+              regulationId: reg.id,
+              clauseId: `${sourcePrefix}_${String(i * 2 + 1).padStart(3, '0')}`,
+              rule: `IF transaction_amount > 0 THEN perform_compliance_review WITHIN days = 30`,
+              conditions: `Fallback clause (AI unavailable) for ${reg.source}: ${reg.title.slice(0, 120)}`,
+              penalties: `Manual review required; follow ${reg.source} guidance and retain evidence.`,
+            },
+            {
+              id: crypto.randomUUID(),
+              regulationId: reg.id,
+              clauseId: `${sourcePrefix}_${String(i * 2 + 2).padStart(3, '0')}`,
+              rule: `IF transaction_type IN ('procurement','payment','transfer') THEN maintain_records FOR period_years = 8`,
+              conditions: `Fallback clause to ensure the audit can proceed even during rate limits.`,
+              penalties: `Documentation gaps may lead to penalties under applicable ${reg.source} rules.`,
+            }
+          ];
+
+          allClauses.push(...clauses);
+          addLog('warning', `AI parse failed; used fallback clauses: ${reg.title.slice(0, 40)}...`);
         }
       }
 
