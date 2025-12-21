@@ -20,7 +20,9 @@ import {
   AlertCircle,
   BarChart3,
   Gauge,
-  Timer
+  Timer,
+  Pause,
+  PlayCircle
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -76,7 +78,7 @@ export default function MasterAgentPage() {
     return Math.round(2200 - level * 400);
   }, [concurrencyLevel]);
 
-  const { isRunning, progress, finalReport, runMasterAgent, reset } = useMasterAgent({
+  const { isRunning, isPaused, progress, finalReport, runMasterAgent, reset, pause, resume } = useMasterAgent({
     minIntervalMs,
     onComplete: (report) => {
       toast({ 
@@ -107,32 +109,43 @@ export default function MasterAgentPage() {
     return () => clearInterval(interval);
   }, [isRunning, startTime]);
 
-  const timeEstimate = useMemo(() => {
-    // Rough estimates per step (in API calls)
-    const STEP_CALLS: Record<MasterAgentStep, number> = {
-      'idle': 0,
-      'analyzing_data': 1,
-      'fetching_regulations': 2,
-      'filtering_regulations': 1,
-      'parsing_clauses': 3, // per regulation
-      'mapping_compliance': 1, // per transaction
-      'generating_report': 1,
-      'complete': 0,
-      'error': 0,
+  // Per-step time estimates
+  const stepTimeEstimates = useMemo(() => {
+    const transactionCount = transactions.length || 1;
+    const regulationEstimate = 5;
+
+    const STEP_ESTIMATES: Record<MasterAgentStep, { calls: number; label: string }> = {
+      'idle': { calls: 0, label: 'Ready' },
+      'analyzing_data': { calls: 1, label: 'Analyzing Data' },
+      'fetching_regulations': { calls: 2, label: 'Fetching Regulations' },
+      'filtering_regulations': { calls: 1, label: 'Filtering Regulations' },
+      'parsing_clauses': { calls: regulationEstimate * 3, label: 'Parsing Clauses' },
+      'mapping_compliance': { calls: transactionCount * 5, label: 'Compliance Mapping' },
+      'generating_report': { calls: 1, label: 'Generating Report' },
+      'complete': { calls: 0, label: 'Complete' },
+      'error': { calls: 0, label: 'Error' },
     };
 
-    // Total estimated calls based on item count
-    const transactionCount = transactions.length || 1;
-    const regulationEstimate = 5; // assume ~5 regulations fetched
-    const totalCalls = 
-      STEP_CALLS['analyzing_data'] +
-      STEP_CALLS['fetching_regulations'] +
-      STEP_CALLS['filtering_regulations'] +
-      (regulationEstimate * STEP_CALLS['parsing_clauses']) +
-      (transactionCount * STEP_CALLS['mapping_compliance']) +
-      STEP_CALLS['generating_report'];
+    const steps = STEPS_ORDER.slice(0, -1).map((step) => {
+      const { calls, label } = STEP_ESTIMATES[step];
+      const seconds = Math.ceil((calls * minIntervalMs) / 1000);
+      return {
+        step,
+        label,
+        calls,
+        seconds,
+        formatted: seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`,
+      };
+    });
 
-    const totalSeconds = Math.ceil((totalCalls * minIntervalMs) / 1000);
+    const totalCalls = steps.reduce((sum, s) => sum + s.calls, 0);
+    const totalSeconds = steps.reduce((sum, s) => sum + s.seconds, 0);
+
+    return { steps, totalCalls, totalSeconds };
+  }, [transactions.length, minIntervalMs]);
+
+  const timeEstimate = useMemo(() => {
+    const { totalCalls, totalSeconds } = stepTimeEstimates;
     const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
 
     const formatTime = (secs: number) => {
@@ -150,7 +163,7 @@ export default function MasterAgentPage() {
       elapsedFormatted: formatTime(elapsedSeconds),
       progressPercent: totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0,
     };
-  }, [transactions.length, minIntervalMs, elapsedSeconds]);
+  }, [stepTimeEstimates, elapsedSeconds]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -376,24 +389,47 @@ export default function MasterAgentPage() {
 
                 <Separator />
 
-                <Button 
-                  className="w-full" 
-                  size="lg"
-                  onClick={handleStartAudit}
-                  disabled={isRunning || transactions.length === 0}
-                >
-                  {isRunning ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Running Audit...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Start Automated Audit
-                    </>
+                <div className="flex gap-2">
+                  <Button 
+                    className="flex-1" 
+                    size="lg"
+                    onClick={handleStartAudit}
+                    disabled={isRunning || transactions.length === 0}
+                  >
+                    {isRunning ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Running Audit...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Start Automated Audit
+                      </>
+                    )}
+                  </Button>
+                  
+                  {isRunning && (
+                    <Button
+                      variant={isPaused ? "default" : "outline"}
+                      size="lg"
+                      onClick={isPaused ? resume : pause}
+                      className="shrink-0"
+                    >
+                      {isPaused ? (
+                        <>
+                          <PlayCircle className="h-4 w-4 mr-2" />
+                          Resume
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="h-4 w-4 mr-2" />
+                          Pause
+                        </>
+                      )}
+                    </Button>
                   )}
-                </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -433,7 +469,7 @@ export default function MasterAgentPage() {
                 <Progress value={getStepProgress()} className="h-2" />
                 
                 <div className="space-y-2">
-                  {STEPS_ORDER.slice(0, -1).map((step) => (
+                  {stepTimeEstimates.steps.map(({ step, label, calls, formatted }) => (
                     <div 
                       key={step}
                       className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
@@ -454,16 +490,25 @@ export default function MasterAgentPage() {
                         {isStepComplete(step) ? (
                           <CheckCircle2 className="h-4 w-4" />
                         ) : isStepActive(step) ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          isPaused ? (
+                            <Pause className="h-3 w-3" />
+                          ) : (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          )
                         ) : (
                           STEP_LABELS[step].icon
                         )}
                       </div>
-                      <span className={`text-sm ${isStepActive(step) ? 'font-medium' : ''}`}>
-                        {STEP_LABELS[step].label}
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-sm ${isStepActive(step) ? 'font-medium' : ''}`}>
+                          {label}
+                        </span>
+                        <div className="text-xs text-muted-foreground">
+                          ~{calls} calls • {formatted}
+                        </div>
+                      </div>
                       {isStepActive(step) && progress.totalItems > 0 && (
-                        <Badge variant="outline" className="ml-auto">
+                        <Badge variant="outline" className="ml-auto shrink-0">
                           {progress.currentItem}/{progress.totalItems}
                         </Badge>
                       )}
