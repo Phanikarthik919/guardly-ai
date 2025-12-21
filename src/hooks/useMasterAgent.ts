@@ -33,6 +33,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
   const { toast } = useToast();
   const pipeline = usePipeline();
   const [isRunning, setIsRunning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [finalReport, setFinalReport] = useState<AuditReport | null>(null);
   const [progress, setProgress] = useState<MasterAgentProgress>({
     step: 'idle',
@@ -46,6 +47,32 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
   // Prevent request storms that trigger 429s
   const lastCallAtRef = useRef(0);
   const minIntervalMs = options.minIntervalMs ?? 450;
+  
+  // Pause/resume refs
+  const pauseResolveRef = useRef<(() => void) | null>(null);
+  const isPausedRef = useRef(false);
+
+  const pause = useCallback(() => {
+    isPausedRef.current = true;
+    setIsPaused(true);
+  }, []);
+
+  const resume = useCallback(() => {
+    isPausedRef.current = false;
+    setIsPaused(false);
+    if (pauseResolveRef.current) {
+      pauseResolveRef.current();
+      pauseResolveRef.current = null;
+    }
+  }, []);
+
+  const checkPause = useCallback(async () => {
+    if (isPausedRef.current) {
+      await new Promise<void>((resolve) => {
+        pauseResolveRef.current = resolve;
+      });
+    }
+  }, []);
 
   const addLog = useCallback((type: 'info' | 'success' | 'error' | 'warning', message: string) => {
     setProgress(prev => ({
@@ -65,6 +92,9 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
   }, []);
 
   const callAgent = async (functionName: string, body: Record<string, unknown>): Promise<string> => {
+    // Check if paused before making call
+    await checkPause();
+    
     // Simple client-side throttling
     const now = Date.now();
     const sinceLast = now - lastCallAtRef.current;
@@ -468,10 +498,13 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
 
   return {
     isRunning,
+    isPaused,
     progress,
     finalReport,
     runMasterAgent,
     reset,
+    pause,
+    resume,
   };
 }
 
