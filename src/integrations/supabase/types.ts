@@ -59,6 +59,36 @@ export type Database = {
         }
         Relationships: []
       }
+      parsed_clauses: {
+        Row: {
+          clause_id: string
+          conditions: string | null
+          created_at: string
+          id: string
+          penalties: string | null
+          regulation_id: string
+          rule: string
+        }
+        Insert: {
+          clause_id: string
+          conditions?: string | null
+          created_at?: string
+          id?: string
+          penalties?: string | null
+          regulation_id: string
+          rule: string
+        }
+        Update: {
+          clause_id?: string
+          conditions?: string | null
+          created_at?: string
+          id?: string
+          penalties?: string | null
+          regulation_id?: string
+          rule?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
