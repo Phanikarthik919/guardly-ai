@@ -167,13 +167,19 @@ export default function RegulationMonitorPage() {
     });
 
     try {
+      // Get the user's access token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Please sign in to run the crawler");
+      }
+
       const response = await fetch(
         `${getSupabasePublicConfig().url}/functions/v1/regulation-crawler`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${getSupabasePublicConfig().publishableKey}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ stream: true }),
         }
