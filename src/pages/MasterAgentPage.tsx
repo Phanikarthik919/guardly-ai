@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { 
   Cpu, 
   Upload, 
@@ -19,7 +19,8 @@ import {
   TrendingUp,
   AlertCircle,
   BarChart3,
-  Gauge
+  Gauge,
+  Timer
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -84,6 +85,72 @@ export default function MasterAgentPage() {
       });
     }
   });
+
+  // Time estimation logic
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (isRunning && !startTime) {
+      setStartTime(Date.now());
+    } else if (!isRunning && startTime) {
+      setStartTime(null);
+      setElapsedSeconds(0);
+    }
+  }, [isRunning, startTime]);
+
+  useEffect(() => {
+    if (!isRunning || !startTime) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isRunning, startTime]);
+
+  const timeEstimate = useMemo(() => {
+    // Rough estimates per step (in API calls)
+    const STEP_CALLS: Record<MasterAgentStep, number> = {
+      'idle': 0,
+      'analyzing_data': 1,
+      'fetching_regulations': 2,
+      'filtering_regulations': 1,
+      'parsing_clauses': 3, // per regulation
+      'mapping_compliance': 1, // per transaction
+      'generating_report': 1,
+      'complete': 0,
+      'error': 0,
+    };
+
+    // Total estimated calls based on item count
+    const transactionCount = transactions.length || 1;
+    const regulationEstimate = 5; // assume ~5 regulations fetched
+    const totalCalls = 
+      STEP_CALLS['analyzing_data'] +
+      STEP_CALLS['fetching_regulations'] +
+      STEP_CALLS['filtering_regulations'] +
+      (regulationEstimate * STEP_CALLS['parsing_clauses']) +
+      (transactionCount * STEP_CALLS['mapping_compliance']) +
+      STEP_CALLS['generating_report'];
+
+    const totalSeconds = Math.ceil((totalCalls * minIntervalMs) / 1000);
+    const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+
+    const formatTime = (secs: number) => {
+      if (secs < 60) return `${secs}s`;
+      const mins = Math.floor(secs / 60);
+      const s = secs % 60;
+      return `${mins}m ${s}s`;
+    };
+
+    return {
+      totalCalls,
+      totalSeconds,
+      remainingSeconds,
+      formatted: formatTime(remainingSeconds),
+      elapsedFormatted: formatTime(elapsedSeconds),
+      progressPercent: totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0,
+    };
+  }, [transactions.length, minIntervalMs, elapsedSeconds]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -334,8 +401,35 @@ export default function MasterAgentPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Audit Progress</CardTitle>
+                {isRunning && (
+                  <CardDescription className="flex items-center gap-2">
+                    <Timer className="h-3 w-3" />
+                    Elapsed: {timeEstimate.elapsedFormatted} • Est. remaining: {timeEstimate.formatted}
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Time Estimation Bar */}
+                {(isRunning || transactions.length > 0) && (
+                  <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Timer className="h-3 w-3" />
+                        {isRunning ? 'Time Remaining' : 'Estimated Duration'}
+                      </span>
+                      <span className="font-mono font-medium">
+                        {isRunning ? timeEstimate.formatted : `~${Math.ceil(timeEstimate.totalSeconds / 60)}m`}
+                      </span>
+                    </div>
+                    {isRunning && (
+                      <Progress value={timeEstimate.progressPercent} className="h-1.5" />
+                    )}
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>~{timeEstimate.totalCalls} API calls</span>
+                      <span>{minIntervalMs}ms interval</span>
+                    </div>
+                  </div>
+                )}
                 <Progress value={getStepProgress()} className="h-2" />
                 
                 <div className="space-y-2">
