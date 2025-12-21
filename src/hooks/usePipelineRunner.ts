@@ -66,7 +66,16 @@ export function usePipelineRunner(options: UsePipelineRunnerOptions = {}) {
     }
     lastCallAtRef.current = Date.now();
 
-    const { url: supabaseUrl, publishableKey } = getSupabasePublicConfig(); const url = `${supabaseUrl}/functions/v1/${functionName}`;
+    const { url: supabaseUrl } = getSupabasePublicConfig();
+    const url = `${supabaseUrl}/functions/v1/${functionName}`;
+
+    // Get the current user's session token for authenticated API calls
+    const { data: { session } } = await supabase.auth.getSession();
+    const authToken = session?.access_token;
+    
+    if (!authToken) {
+      throw new Error('Not authenticated. Please log in to run the pipeline.');
+    }
 
     const maxRetries = 3;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -74,7 +83,7 @@ export function usePipelineRunner(options: UsePipelineRunnerOptions = {}) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${publishableKey}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify(body),
       });
