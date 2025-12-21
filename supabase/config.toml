@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.regulation-crawler]
 verify_jwt = false
+
+[functions.batch-compliance-audit]
+verify_jwt = false
