@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { getSupabasePublicConfig } from "@/lib/publicConfig";
 
 interface UseStreamingAgentOptions {
   onComplete?: (fullResponse: string) => void;
@@ -23,9 +24,7 @@ export function useStreamingAgent(options: UseStreamingAgentOptions = {}) {
       setError(null);
 
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
+        const { url: supabaseUrl, publishableKey: supabaseKey } = getSupabasePublicConfig();
         const resp = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
           method: "POST",
           headers: {

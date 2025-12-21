@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { getSupabasePublicConfig } from "@/lib/publicConfig";
 
 type AgentType = 'regulation-monitor' | 'legal-parser' | 'transaction-understanding' | 'compliance-mapping' | 'auditor-assistant';
 
@@ -34,14 +35,14 @@ export function useAgentDemo(agentType: AgentType): UseAgentDemoReturn {
     setResponse('');
 
     const { endpoint, inputKey } = AGENT_ENDPOINTS[agentType];
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`;
+    const url = `${getSupabasePublicConfig().url}/functions/v1/${endpoint}`;
 
     try {
       const resp = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${getSupabasePublicConfig().publishableKey}`,
         },
         body: JSON.stringify({ [inputKey]: input }),
       });

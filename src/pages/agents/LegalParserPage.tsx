@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { ClauseStatsCards } from "@/components/agents/ClauseStatsCards";
 import { ClauseDetailModal } from "@/components/agents/ClauseDetailModal";
 import { useStreamingAgent } from "@/hooks/useStreamingAgent";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/clientRuntime";
 
 interface IndexedRegulation {
   id: string;

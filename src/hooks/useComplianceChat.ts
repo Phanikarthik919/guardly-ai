@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getSupabasePublicConfig } from "@/lib/publicConfig";
 
 export interface Message {
   role: "user" | "assistant";
@@ -32,13 +32,15 @@ export const useComplianceChat = () => {
     try {
       abortControllerRef.current = new AbortController();
       
+      const { url: supabaseUrl, publishableKey } = getSupabasePublicConfig();
+
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/compliance-chat`,
+        `${supabaseUrl}/functions/v1/compliance-chat`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${publishableKey}`,
           },
           body: JSON.stringify({ messages: [...messages, userMsg] }),
           signal: abortControllerRef.current.signal,

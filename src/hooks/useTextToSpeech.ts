@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { getSupabasePublicConfig } from "@/lib/publicConfig";
 
 export const useTextToSpeech = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -16,13 +17,15 @@ export const useTextToSpeech = () => {
     setIsSpeaking(true);
 
     try {
+      const { url: supabaseUrl, publishableKey } = getSupabasePublicConfig();
+
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        `${supabaseUrl}/functions/v1/elevenlabs-tts`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${publishableKey}`,
           },
           body: JSON.stringify({ text: text.slice(0, 5000) }), // Limit text length
         }

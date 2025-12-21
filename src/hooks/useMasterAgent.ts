@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { usePipeline, Regulation, ParsedClause, Transaction, ComplianceResult, AuditReport } from '@/contexts/PipelineContext';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/clientRuntime';
+import { getSupabasePublicConfig } from '@/lib/publicConfig';
 import { useToast } from '@/hooks/use-toast';
 
 export type MasterAgentStep = 
@@ -103,7 +104,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
     }
     lastCallAtRef.current = Date.now();
 
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`;
+    const { url: supabaseUrl, publishableKey } = getSupabasePublicConfig(); const url = `${supabaseUrl}/functions/v1/${functionName}`;
 
     const maxRetries = 3;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -111,7 +112,7 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${publishableKey}`,
         },
         body: JSON.stringify(body),
       });
