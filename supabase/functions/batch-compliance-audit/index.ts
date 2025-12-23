@@ -87,10 +87,10 @@ serve(async (req) => {
 
   try {
     const { transactions, regulations }: BatchRequest = await req.json();
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not configured");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     console.log(`Batch Compliance Audit: ${transactions.length} transactions, ${regulations.length} regulations`);
@@ -106,21 +106,20 @@ serve(async (req) => {
 
     const userPrompt = `REGULATIONS:\n${regulationsSummary}\n\n---\n\nTRANSACTIONS:\n${transactionsSummary}\n\nAnalyze and return the JSON response.`;
 
-    // Single API call using OpenAI
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // Single API call using Gemini API
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: BATCH_PROMPT },
-          { role: "user", content: userPrompt }
+        contents: [
+          { role: "user", parts: [{ text: `${BATCH_PROMPT}\n\n${userPrompt}` }] }
         ],
-        max_tokens: 8000,
-        temperature: 0.3,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 8000,
+        },
       }),
     });
 
@@ -132,7 +131,7 @@ serve(async (req) => {
         });
       }
       const errorText = await response.text();
-      console.error("OpenAI API error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
       return new Response(JSON.stringify({ error: "AI API error: " + errorText }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -140,7 +139,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     console.log("AI response length:", content.length);
 
