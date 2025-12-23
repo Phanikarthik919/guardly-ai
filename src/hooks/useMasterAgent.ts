@@ -338,16 +338,9 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
         updateProgress('mapping_compliance', 'Running batch compliance analysis...', 0, 1);
         addLog('info', `Batch processing ${inputTransactions.length} transactions against ${regulations.length} regulations`);
 
-        const { url: backendUrl, publishableKey } = getSupabasePublicConfig();
-        
-        const response = await fetch(`${backendUrl}/functions/v1/batch-compliance-audit`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publishableKey}`,
-          },
-          body: JSON.stringify({
-            transactions: inputTransactions.map(t => ({
+        const batchResult = await invokeBatchComplianceAudit(
+          {
+            transactions: inputTransactions.map((t) => ({
               id: t.id,
               date: t.date,
               vendor: t.vendor,
@@ -357,21 +350,12 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
               category: t.category,
             })),
             regulations: uncachedRegs.length > 0 ? uncachedRegs : regulations,
-          }),
-        });
-
-        if (!response.ok) {
-          if (response.status === 429) {
-            throw new Error('Rate limits exceeded. Please wait a moment and try again.');
+          },
+          {
+            onRetry: (msg) => addLog('warning', msg),
           }
-          if (response.status === 402) {
-            throw new Error('AI credits exhausted. Please add credits to your Lovable workspace.');
-          }
-          const errorText = await response.text();
-          throw new Error(`Batch audit failed: ${errorText}`);
-        }
+        );
 
-        const batchResult = await response.json();
         addLog('success', 'Batch compliance analysis complete');
 
         // Process new clauses from batch result
@@ -556,6 +540,57 @@ export function useMasterAgent(options: UseMasterAgentOptions = {}) {
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function invokeBatchComplianceAudit(
+  payload: Record<string, unknown>,
+  opts?: {
+    onRetry?: (message: string) => void;
+  }
+): Promise<any> {
+  const { url: backendUrl, publishableKey } = getSupabasePublicConfig();
+  const url = `${backendUrl}/functions/v1/batch-compliance-audit`;
+
+  const maxRetries = 6;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publishableKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (resp.ok) return await resp.json();
+
+    // Retry on provider throttling
+    if (resp.status === 429) {
+      const retryAfterHeader = resp.headers.get('Retry-After');
+      const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+
+      const backoffMs = Number.isFinite(retryAfterSec)
+        ? Math.max(0, retryAfterSec) * 1000
+        : Math.min(60_000, 1500 * Math.pow(2, attempt));
+
+      if (attempt < maxRetries) {
+        opts?.onRetry?.(`Rate limited. Retrying in ${Math.ceil(backoffMs / 1000)}s...`);
+        await sleep(backoffMs);
+        continue;
+      }
+
+      throw new Error('Rate limits exceeded. Please wait ~1 minute and try again.');
+    }
+
+    if (resp.status === 402) {
+      throw new Error('AI credits exhausted. Please add credits / billing for your provider.');
+    }
+
+    const errorText = await readResponseError(resp);
+    throw new Error(`Batch audit failed: ${errorText}`);
+  }
+
+  throw new Error('Batch audit failed after retries.');
+}
 
 async function readResponseError(resp: Response): Promise<string> {
   const contentType = resp.headers.get('content-type') || '';
