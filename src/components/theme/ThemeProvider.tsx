@@ -5,7 +5,7 @@ import type { ThemeProviderProps } from "next-themes/dist/types";
 export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
   return (
     <NextThemesProvider
-      attribute="class"
+      attribute="class"                    // cache-bust-001
       defaultTheme="dark"
       enableSystem
       disableTransitionOnChange
