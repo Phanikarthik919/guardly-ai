@@ -20,6 +20,7 @@ import PipelineOverviewPage from "./pages/dashboard/PipelineOverviewPage";
 import NotificationsPage from "./pages/dashboard/NotificationsPage";
 import SettingsPage from "./pages/dashboard/SettingsPage";
 import HelpPage from "./pages/dashboard/HelpPage";
+import ProfilePage from "./pages/dashboard/ProfilePage";
 import RegulationMonitorPage from "./pages/agents/RegulationMonitorPage";
 import LegalParserPage from "./pages/agents/LegalParserPage";
 import TransactionUnderstandingPage from "./pages/agents/TransactionUnderstandingPage";
@@ -200,6 +201,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <HelpPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <ProfilePage />
                     </ProtectedRoute>
                   }
                 />

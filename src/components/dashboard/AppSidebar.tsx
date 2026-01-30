@@ -17,7 +17,8 @@ import {
   MessageSquare,
   Sparkles,
   Cpu,
-  Users
+  Users,
+  UserCircle
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { usePipeline } from "@/contexts/PipelineContext";
@@ -98,6 +99,7 @@ const additionalNav = [
 ];
 
 const bottomLinks = [
+  { title: "Profile", url: "/profile", icon: UserCircle },
   { title: "Notifications", url: "/notifications", icon: Bell },
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "Help & Support", url: "/help", icon: HelpCircle },
